@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+  <meta charset="UTF-8" />
+  <title>WMS · CEDIS · DASHBOARD</title>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;900&family=Orbitron:wght@400;700;900&display=swap"
+    rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+
+  <!-- EFECTO OCÉANO DASHBOARD VLADY -->
+  <div class="ocean">
+    <div class="wave"></div>
+    <div class="wave"></div>
+  </div>
+
+  <div id="loading">
+    <div class="lring"></div>
+  </div>
+
+  <canvas id="bg"></canvas>
+
+
+  <div id="app"
+    style="display: flex; flex-direction: column; height: 100vh; padding: 1vh 1vw; box-sizing: border-box; overflow: hidden;">
+
+    <div id="topSection" style="display: flex; height: 50vh; gap: 1vw; margin-bottom: 1vh; align-items: stretch;">
+
+      <div class="glass" id="colGauge"
+        style="flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; padding: 20px;">
+        
+        <!-- INTEGRATED NAVIGATION -->
+        <div id="dateFilterWrap">
+          <select id="dateFilter">
+            <option value="AUTO">HOY</option>
+          </select>
+          <button id="btnHome" class="home-btn" title="Ir al Menú Principal">
+            <i class="fas fa-home"></i>
+          </button>
+        </div>
+
+        <canvas id="gaugeCanvas" style="width: 85% !important; height: 85% !important; object-fit: contain;"></canvas>
+      </div>
+
+      <div id="sideControlPanel" style="flex: 1; display: flex; flex-direction: column; gap: 1vh;">
+
+        <div id="miniKpiGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1vh; height: 25vh;">
+          <div class="glass kpi summary-box"
+            style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <span class="k-lbl" style="font-size: 0.8vw;">LPN TOTALES</span>
+            <span class="k-val k-org" id="kEnv" style="font-size: 2.5vw;">—</span>
+          </div>
+          <div class="glass kpi summary-box"
+            style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <span class="k-lbl" style="font-size: 0.8vw;">LPN RECIBIDAS</span>
+            <span class="k-val k-cya" id="kRec" style="font-size: 2.5vw;">—</span>
+          </div>
+          <div class="glass kpi summary-box"
+            style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <span class="k-lbl" style="font-size: 0.8vw;">SKU TOTALES</span>
+            <span class="k-val k-grn" id="kSku" style="font-size: 2.5vw;">—</span>
+          </div>
+          <div class="glass kpi summary-box"
+            style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
+            <span class="k-lbl" style="font-size: 0.8vw;">PROVEEDORES</span>
+            <span class="k-val k-mag" id="kProv" style="font-size: 2.5vw;">—</span>
+          </div>
+        </div>
+
+        <div id="colBats" class="glass"
+          style="flex: 1; display: flex; flex-direction: column; justify-content: space-evenly; padding: 1vh 2vw;">
+          <div class="vbat" style="display: flex; align-items: center; gap: 1vw;">
+            <div class="dp-lbl" style="font-size: 1.2vw !important; font-weight: 800; width: 3vw; color: #00e5ff;">DP
+            </div>
+            <div class="vbat-tank c-cyan"
+              style="flex: 1; height: 4vh !important; border-radius: 6px; position: relative;">
+              <div class="vbat-fill bg-cyan" id="dpFill">
+                <div id="dpBubs" class="bubbles"></div>
+              </div>
+              <div class="v-txt-wrap"
+                style="position: absolute; width: 100%; text-align: center; top: 50%; transform: translateY(-50%);">
+                <span class="v-pct c-cyan-glow" id="dpPct" style="font-size: 1.8vw !important;">0%</span>
+              </div>
+            </div>
+            <div class="v-info-side" style="width: 6vw; text-align: right;">
+              <span class="v-num" id="dpNum" style="font-size: 0.9vw !important;">0/0</span>
+            </div>
+          </div>
+
+          <div class="vbat" style="display: flex; align-items: center; gap: 1vw;">
+            <div class="cds-lbl" style="font-size: 1.2vw !important; font-weight: 800; width: 3vw; color: #b2ff00;">CDS
+            </div>
+            <div class="vbat-tank c-neon"
+              style="flex: 1; height: 4vh !important; border-radius: 6px; position: relative;">
+              <div class="vbat-fill bg-neon" id="cdsFill">
+                <div id="cdsBubs" class="bubbles"></div>
+              </div>
+              <div class="v-txt-wrap"
+                style="position: absolute; width: 100%; text-align: center; top: 50%; transform: translateY(-50%);">
+                <span class="v-pct c-neon-glow" id="cdsPct" style="font-size: 1.8vw !important;">0%</span>
+              </div>
+            </div>
+            <div class="v-info-side" style="width: 6vw; text-align: right;">
+              <span class="v-num" id="cdsNum" style="font-size: 0.9vw !important;">0/0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div id="bottomRow" style="flex: 1; min-height: 0;">
+      <div class="glass" id="colTable" style="height: 100%; display: flex; flex-direction: column;">
+        <div id="tHeadWrap" class="wavy-header">
+          <div id="tHeadRow">
+            <span>NOMBRE DE PROVEEDOR</span>
+            <span>ESTADO</span>
+            <span>ORIGEN</span>
+            <span>SKU TOTALES</span>
+            <span>LPN INGRESADO</span>
+            <span>LPN TOTAL</span>
+            <span>% AVANCE</span>
+          </div>
+        </div>
+        <div id="tblVp" style="flex: 1; overflow: hidden;">
+          <div id="tblTrack" class="table-scroll-wrapper">
+            <div id="table-body"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+  <script src="dashboard_logic.js"></script>
+</body>
+
+</html>

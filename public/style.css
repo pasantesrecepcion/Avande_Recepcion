@@ -1,0 +1,802 @@
+@property --ang {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+:root {
+  --neon: #00ff88;
+  --cyan: #00e5ff;
+  --mag: #e040fb;
+  --green: #ffff00;
+  --emerald: #00ff66;
+  --org: #ff7020;
+  --bg: #020205;
+  --glass: rgba(0, 0, 0, 0.4);
+  --txt: #d8eef5;
+  --muted: #4a6878;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100vh;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--txt);
+  font-family: 'Montserrat', sans-serif;
+}
+
+/* ══ BACKGROUND ══ */
+#bg {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* ══ DATE FILTER & HOME (INTEGRATED) ══ */
+#dateFilterWrap {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 100;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+#dateFilter {
+  appearance: none;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  border: 1px solid rgba(0, 229, 255, .3);
+  border-radius: 4px;
+  outline: none;
+  color: var(--cyan);
+  font-family: 'Montserrat';
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 24px 6px 10px;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2300e5ff' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  transition: all 0.3s;
+}
+
+.home-btn {
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(0, 229, 255, .3);
+  color: var(--cyan);
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 16px;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.home-btn:hover {
+  background: var(--cyan);
+  color: #000;
+  box-shadow: 0 0 15px var(--cyan);
+  transform: translateY(-2px);
+}
+
+#dateFilter option {
+  background: #04040a;
+}
+
+/* ══ LOADING ══ */
+#loading {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  transition: opacity .5s;
+}
+
+#loading.gone {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lring {
+  width: 60px;
+  height: 60px;
+  border: 3px solid rgba(0, 255, 136, .15);
+  border-top-color: var(--neon);
+  border-radius: 50%;
+  animation: spin .75s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ══ APP GRID 100vh ══ */
+#app {
+  position: relative;
+  z-index: 1;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  padding: 2vh 2vw;
+  gap: 2vh;
+  overflow: hidden;
+}
+
+/* Glass Panels */
+.glass {
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  border-radius: 14px;
+  position: relative;
+  overflow: hidden;
+  /* Borde con un poco más de luz y sombra de brillo (glow) */
+  border: 2px solid rgba(0, 229, 255, 0.5) !important;
+  box-shadow: 0 0 40px rgba(0, 229, 255, 0.4), inset 0 0 20px rgba(0, 229, 255, 0.2) !important;
+}
+
+/* ══ SYNC LASER (Cada 3 segundos en todos lados a la vez) ══ */
+.sync-laser::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 12px;
+  padding: 2px;
+  background: conic-gradient(from var(--ang), transparent 0%, var(--neon) 10%, transparent 25%);
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  animation: sLaser 3s linear infinite;
+  pointer-events: none;
+  z-index: 10;
+}
+
+/* 1s visible (33%), 2s invisible (66%). Total 3s */
+@keyframes sLaser {
+  0% {
+    --ang: 0deg;
+    opacity: 0;
+  }
+
+  5% {
+    opacity: 1;
+  }
+
+  33% {
+    --ang: 360deg;
+    opacity: 1;
+  }
+
+  38% {
+    opacity: 0;
+    --ang: 360deg;
+  }
+
+  100% {
+    opacity: 0;
+    --ang: 360deg;
+  }
+}
+
+/* ══ FILA SUPERIOR: KPIs (20%) ══ */
+
+
+.kpi {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.k-txt {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 1vh;
+}
+
+.k-lbl {
+  font-size: 0.8vw;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #888;
+  font-family: 'Orbitron', sans-serif;
+  text-transform: uppercase;
+}
+
+.k-val {
+  font-size: 2.8vw;
+  font-weight: 900;
+  line-height: 1;
+  font-family: 'Inter', sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+
+.k-org {
+  color: #00BCD4;
+  text-shadow: 0 0 12px rgba(0, 188, 212, 0.8), 0 0 25px rgba(0, 188, 212, 0.4) !important;
+}
+
+.k-cya {
+  color: #00BCD4;
+  text-shadow: 0 0 12px rgba(0, 188, 212, 0.8), 0 0 25px rgba(0, 188, 212, 0.4) !important;
+}
+
+.k-grn {
+  color: #00BCD4;
+  text-shadow: 0 0 12px rgba(0, 188, 212, 0.8), 0 0 25px rgba(0, 188, 212, 0.4) !important;
+}
+
+.k-mag {
+  color: #00BCD4;
+  text-shadow: 0 0 12px rgba(0, 188, 212, 0.8), 0 0 25px rgba(0, 188, 212, 0.4) !important;
+}
+
+/* ══ FILA CENTRAL: GRÁFICOS (40%) ══ */
+
+
+/* Busca tu ID actual del contenedor negro */
+#colGauge {
+  padding: 0 !important;
+  /* Elimina cualquier espaciado interno residual */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  /* ESTA ES LA CLAVE: cualquier cosa que se salga de este cuadro, se oculta */
+  z-index: 10;
+
+  /* SI TIENES ESTO, BORRALO O COMENTALO (Ponle /* delante): */
+  /* height: 25vh;  O cualquier valor fijo como 300px */
+
+  /* AHORA ASEGÚRATE DE TENER ESTO PARA QUE USE TODO EL ALTO DE LA FILA SUPERIOR: */
+  height: 100%;
+  /* O usa height: 40vh; si quieres fijar la altura de la fila completa */
+}
+
+/* El canvas ahora se queda dentro de su caja */
+#gaugeCanvas {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+
+  /* Esto ayuda a que el resplandor (glow) no se corte al rozar el borde */
+  filter: drop-shadow(0px 0px 5px rgba(0, 229, 255, 0.3));
+}
+
+/* COL 2: BATTERIES */
+#colBats {
+  flex: 2;
+  display: flex;
+  flex-direction: column !important;
+  /* Apilamos DP sobre CDS */
+  justify-content: center;
+  gap: 3vh;
+  /* Espacio entre las dos barras horizontales */
+  padding: 2vh 3vw;
+}
+
+.vbat {
+  width: 100% !important;
+  height: 240px !important;
+  /* Aumentamos la altura del contenedor */
+  display: flex !important;
+  align-items: center !important;
+  margin-bottom: 20px !important;
+}
+
+/* Etiquetas DP y CDS */
+.dp-lbl {
+  font-size: 55px !important;
+  /* Letras más grandes */
+  min-width: 120px !important;
+  font-weight: 900 !important;
+  color: #00e5ff !important;
+  /* Celeste DP */
+  text-shadow: 0 0 20px #00e5ff;
+}
+
+.cds-lbl {
+  font-size: 55px !important;
+  min-width: 120px !important;
+  font-weight: 900 !important;
+  color: #ffff00 !important;
+  /* Amarillo CDS */
+  text-shadow: 0 0 20px #ffff00;
+}
+
+.dp-lbl {
+  color: var(--cyan);
+  text-shadow: 0 0 20px var(--cyan);
+}
+
+.cds-lbl {
+  color: var(--green);
+  text-shadow: 0 0 20px var(--green);
+}
+
+/* El "tanque" o fondo de la barra */
+.vbat-tank {
+  height: 100px !important;
+  /* Grosor de la barra aumentado */
+  flex-grow: 1;
+  border-radius: 15px !important;
+  background: rgba(0, 0, 0, 0.7) !important;
+  border: 3px solid rgba(255, 255, 255, 0.1) !important;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+}
+
+.c-cyan {
+  box-shadow: inset 0 0 20px rgba(0, 188, 212, 0.1);
+}
+
+.c-neon {
+  box-shadow: inset 0 0 20px rgba(178, 255, 0, 0.1);
+}
+
+.vbat-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  height: 100% !important;
+  width: 0%;
+  transition: width 2s cubic-bezier(.4, 0, .2, 1) !important;
+}
+
+.bg-cyan {
+  background: linear-gradient(90deg, #008ba3, #00e5ff) !important;
+  /* Celeste DP */
+  box-shadow: 0 0 30px rgba(0, 229, 255, 0.6);
+}
+
+.bg-neon {
+  background: linear-gradient(90deg, #b2b200, #ffff00) !important;
+  /* Amarillo CDS */
+  box-shadow: 0 0 30px rgba(255, 255, 0, 0.6);
+}
+
+.vbat-wave {
+  width: 100%;
+  height: 10px;
+  flex-shrink: 0;
+  transform: translateY(-9px);
+}
+
+/* Centered Text Logic inside Battery - SUPER Contraste */
+.v-txt-wrap {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10;
+  pointer-events: none;
+}
+
+.v-info-side {
+  width: 18% !important;
+  /* Subimos de 12% a 18% para alejarlo del tanque */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 0.5vh;
+}
+
+/* Numerador Ej. 150/170 con fondo oscuro solido y letras impecablemente legibles */
+.v-num {
+  font-size: 1.3vw !important;
+  /* Subimos de 1.1vw a 1.3vw */
+  font-weight: 800;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.8);
+  /* Fondo más sólido para que no se pierda */
+  padding: 8px 16px;
+  /* Más relleno para que sea un cuadro más robusto */
+  border-radius: 8px;
+  border: 1px solid currentColor;
+  box-shadow: 0 0 10px currentColor;
+  display: inline-block;
+  white-space: nowrap;
+}
+
+/* Porcentaje grande flotando dentro del tanque */
+.v-pct {
+  font-size: 40px !important;
+  /* Porcentaje más visible */
+  font-weight: 900 !important;
+  color: #fff !important;
+  text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
+  z-index: 20;
+}
+
+.c-cyan-glow {
+  text-shadow: 0 0 10px rgba(0, 0, 0, 1), 0 0 20px var(--cyan) !important;
+}
+
+.c-neon-glow {
+  text-shadow: 0 0 10px rgba(0, 0, 0, 1), 0 0 20px var(--green) !important;
+}
+
+
+.bubbles {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.bub {
+  position: absolute;
+  background: rgba(255, 255, 255, .4);
+  border-radius: 50%;
+  animation: bubUp linear infinite;
+}
+
+@keyframes bubUp {
+  0% {
+    left: 0;
+    opacity: 0.8;
+    transform: translateY(0);
+  }
+
+  100% {
+    left: 100%;
+    opacity: 0;
+    transform: translateY(var(--dy));
+  }
+}
+
+
+/* COL 3: TABLE (40%) */
+/* ══ FILA INFERIOR: TABLA (40%) ══ */
+#bottomRow {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+#colTable {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+#tHeadWrap {
+  position: relative;
+  background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.1), transparent);
+  border-bottom: none;
+  /* Quitamos el borde solido porque ahora tiene onda */
+  padding: 1.5vh 1vw;
+  flex-shrink: 0;
+}
+
+
+#tHeadRow {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1.2fr 1.2fr 1.5fr;
+  position: relative;
+  z-index: 10;
+}
+
+#tHeadRow span {
+  font-size: 0.9vw;
+  font-family: 'Orbitron', sans-serif;
+  color: var(--cyan);
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.8), 0 0 20px rgba(0, 229, 255, 0.4);
+  text-transform: uppercase;
+  text-align: center;
+}
+
+#tblVp {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+
+.table-scroll-wrapper {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+}
+
+#table-body {
+  display: flex;
+  flex-direction: column;
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+}
+
+.trow {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr 1fr 1.2fr 1.2fr 1.5fr;
+  padding: 1.5vh 1vw;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  align-items: center;
+}
+
+/* Numerics and Text */
+.trow span {
+  font-size: 1.1vw;
+  font-family: 'Inter', sans-serif;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+}
+
+.c-prov {
+  color: #fff;
+  text-align: left !important;
+  font-weight: 600;
+  padding-left: 10px;
+}
+
+.c-orig {
+  color: #aaa;
+}
+
+.c-sku {
+  color: #fff;
+}
+
+.c-env {
+  color: #00BCD4;
+  font-weight: 800;
+}
+
+.c-rec {
+  color: #4CAF50;
+  font-weight: 800;
+}
+
+/* Status Pills */
+.pill {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.8vw !important;
+  font-weight: 700;
+  display: inline-block;
+  text-align: center;
+  margin: 0 auto;
+}
+
+.pill-ver {
+  background: rgba(0, 255, 102, 0.15);
+  color: #00ff66;
+  border: 1px solid rgba(0, 255, 102, 0.5);
+  box-shadow: 0 0 10px rgba(0, 255, 102, 0.4);
+}
+
+.pill-tra {
+  background: rgba(224, 64, 251, 0.15);
+  color: #e040fb;
+  border: 1px solid rgba(224, 64, 251, 0.5);
+  box-shadow: 0 0 10px rgba(224, 64, 251, 0.4);
+}
+
+.pill-com {
+  background: rgba(0, 85, 255, 0.15);
+  color: #0055ff;
+  border: 1px solid rgba(0, 85, 255, 0.5);
+  box-shadow: 0 0 10px rgba(0, 85, 255, 0.4);
+}
+
+.pill-ini {
+  background: rgba(255, 112, 32, 0.15);
+  color: #ff7020;
+  border: 1px solid rgba(255, 112, 32, 0.5);
+  box-shadow: 0 0 10px rgba(255, 112, 32, 0.4);
+}
+
+.pill-pen {
+  background: rgba(158, 158, 158, 0.15);
+  color: #9E9E9E;
+  border: 1px solid rgba(158, 158, 158, 0.5);
+}
+
+/* Progress Neon Bar */
+.t-bar-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5vw;
+  justify-content: center;
+}
+
+.t-bar-pct {
+  color: #39FF14 !important;
+  /* Verde Neón */
+  font-weight: bold;
+  text-shadow: 0 0 5px rgba(57, 255, 20, 0.5);
+}
+
+/* Animación de "brillo" moviéndose en las barras */
+.neon-moving-bar {
+  background: linear-gradient(90deg, #00e5ff, #39FF14, #00e5ff);
+  background-size: 200% 100%;
+  animation: moveGradient 2s linear infinite;
+  box-shadow: 0 0 10px rgba(57, 255, 20, 0.7);
+  height: 100%;
+  border-radius: 4px;
+}
+
+@keyframes moveGradient {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+/* Ajuste para que el texto de ESTADO no se corte */
+.c-est {
+  display: flex;
+  justify-content: center;
+  min-width: 140px;
+  /* Asegura espacio para "RECEPCIÓN COMPLETA" */
+}
+
+.pill {
+  white-space: nowrap;
+  /* Evita que el texto salte de línea */
+  padding: 2px 8px;
+  font-size: 0.85em;
+}
+
+.t-bar-bg {
+  flex: 1;
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05) !important;
+  /* Fondo de barra muy tenue */
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.t-bar-fill {
+  height: 100%;
+  background: #09ff00;
+  box-shadow: 0 0 10px rgba(0, 229, 255, 0.6);
+  border-radius: 4px;
+  animation: pulseNeon 2s infinite alternate;
+}
+
+@keyframes pulseNeon {
+  from {
+    opacity: 0.7;
+    box-shadow: 0 0 5px rgba(0, 229, 255, 0.4);
+  }
+
+  to {
+    opacity: 1;
+    box-shadow: 0 0 15px rgba(0, 229, 255, 0.8);
+  }
+}
+
+/* --- EFECTO DE ONDAS DASHBOARD VLADY --- */
+.ocean {
+  height: 15%;
+  /* Ajusta según qué tan alto quieras el efecto */
+  width: 100%;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  background: transparent;
+  overflow: hidden;
+  z-index: -1;
+  /* Se mantiene detrás de los datos */
+}
+
+.wave {
+  background: url(https://s3-us-west-2.amazonaws.com/s.cdpn.io/85486/wave.svg) repeat-x;
+  position: absolute;
+  top: -198px;
+  width: 6400px;
+  height: 198px;
+  animation: wave 7s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite;
+  transform: translate3d(0, 0, 0);
+  opacity: 0.3;
+  /* Transparencia para que no opaque los datos */
+}
+
+.wave:nth-of-type(2) {
+  top: -175px;
+  animation: wave 7s cubic-bezier(0.36, 0.45, 0.63, 0.53) -.125s infinite, swell 7s ease -1.25s infinite;
+  opacity: 1;
+}
+
+@keyframes wave {
+  0% {
+    margin-left: 0;
+  }
+
+  100% {
+    margin-left: -1600px;
+  }
+}
+
+@keyframes swell {
+
+  0%,
+  100% {
+    transform: translate3d(0, -25px, 0);
+  }
+
+  50% {
+    transform: translate3d(0, 5px, 0);
+  }
+}
+
+/* Aplicación a los encabezados y KPIs */
+.wavy-header,
+.summary-box {
+  background: linear-gradient(180deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Pseudo-elemento para simular la onda en los boxes */
+.summary-box::after {
+  content: "";
+  position: absolute;
+  bottom: -10px;
+  left: 0;
+  width: 200%;
+  height: 20px;
+  background: url(https://s3-us-west-2.amazonaws.com/s.cdpn.io/85486/wave.svg) repeat-x;
+  opacity: 0.2;
+  animation: wave 10s linear infinite;
+}
+
+/* Efecto cuando el mouse pasa sobre una fila de la tabla */
+.trow {
+  transition: all 0.3s ease;
+  /* Para que el cambio de color sea suave */
+  cursor: pointer;
+}
+
+.trow:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  /* Un fondo gris traslúcido */
+  box-shadow: inset 0 0 20px rgba(0, 229, 255, 0.2);
+  /* Un resplandor interno cian */
+  transform: scale(1.01) translateX(5px);
+  /* Se agranda un pelín y se mueve a la derecha */
+  border-left: 4px solid #00e5ff;
+  /* Una barrita neón al inicio de la fila */
+  z-index: 10;
+}
