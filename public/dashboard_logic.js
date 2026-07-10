@@ -1,4 +1,8 @@
-const firebaseConfig = {
+// ═════════════════════════════════════════════════════════════════════════
+// 1. INICIALIZACIÓN DE AMBAS BASES DE DATOS (FIREBASE DOBLE)
+// ═════════════════════════════════════════════════════════════════════════
+
+const configAvance = {
     apiKey: 'AIzaSyDLBnGH_k_7ss6sk4aVAX_EBPOcvWiVZMM',
     authDomain: 'wms-dashboard-12982.firebaseapp.com',
     databaseURL: 'https://wms-dashboard-12982-default-rtdb.firebaseio.com',
@@ -8,14 +12,31 @@ const firebaseConfig = {
     appId: '1:105741824412:web:c8cf48aa31dbf015915859',
     measurementId: 'G-69LNDW0HPJ'
 };
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+const appAvance = firebase.initializeApp(configAvance, "appAvance");
+const dbAvance = appAvance.database();
+
+const configProductividad = {
+    databaseURL: 'https://logistica-b100-default-rtdb.firebaseio.com/'
+};
+const appProductividad = firebase.initializeApp(configProductividad, "appProductividad");
+const dbProductividad = appProductividad.database();
+
+
+// ═════════════════════════════════════════════════════════════════════════
+// 2. ESTADO GLOBAL Y UTILERÍAS
+// ═════════════════════════════════════════════════════════════════════════
+let allRecords = [];
+let pndRecords = [];
+
+let currentOriginFilter = 'ALL';
+let currentProvFilter = 'ALL';
+let currentStatusFilter = 'ALL';
+let gaugeTarget = 0, gaugeCur = 0;
 
 const toN = v => { const n = Number(String(v ?? '').replace(/,/g, '').trim()); return isNaN(n) ? 0 : n; };
 const fmt = n => Number(n).toLocaleString('es-AR');
 const todayStr = () => { const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; };
 
-// Traducción y homologación estricta de estados
 const statusOf = s => {
     const l = String(s || '').toLowerCase();
     if (l.includes('verif') || l.includes('verified')) return 'VERIFICADO';
@@ -25,8 +46,9 @@ const statusOf = s => {
     return 'PENDIENTE';
 };
 
-let allRecords = [], currentOriginFilter = 'ALL', currentProvFilter = 'ALL', gaugeTarget = 0, gaugeCur = 0, gaugeRaf = null;
-
+// ═════════════════════════════════════════════════════════════════════════
+// 3. LOGICA DE FILTROS Y RENDERS (MÓDULO AVANCE - FB1)
+// ═════════════════════════════════════════════════════════════════════════
 function populateDates(records) {
     const sel = document.getElementById('dateFilter');
     const prev = sel.value;
@@ -59,6 +81,10 @@ function populateProviders(records) {
         });
     }
 
+    if (currentStatusFilter !== 'ALL') {
+        activeRecords = activeRecords.filter(r => statusOf(r['ESTADO'] || r['Estado LPN']) === currentStatusFilter);
+    }
+
     const provs = [...new Set(activeRecords.map(r => r['NOMBRE DE PROVEEDOR']).filter(Boolean))].sort();
     sel.innerHTML = '<option value="ALL">TODOS LOS PROVEEDORES</option>';
     provs.forEach(p => { const o = document.createElement('option'); o.value = o.textContent = p; sel.appendChild(o); });
@@ -86,6 +112,9 @@ function getFiltered() {
     if (currentProvFilter !== 'ALL') {
         records = records.filter(r => r['NOMBRE DE PROVEEDOR'] === currentProvFilter);
     }
+    if (currentStatusFilter !== 'ALL') {
+        records = records.filter(r => statusOf(r['ESTADO'] || r['Estado LPN']) === currentStatusFilter);
+    }
     return records;
 }
 
@@ -106,7 +135,6 @@ function renderKPIs({ env, rec, sku, prov }) {
 }
 
 const SEGS = 72, GAP = 0.035;
-
 function getGaugeColor(pctVal) {
     if (pctVal <= 12.5) return ['#FF0000', 'rgba(255,0,0,.7)'];
     if (pctVal <= 25) return ['#FF4500', 'rgba(255,69,0,.7)'];
@@ -271,36 +299,25 @@ function initBubbles() {
     });
 }
 
-// NUEVA FUNCIÓN DE AGREGACIÓN DESGLOSADA POR PROVEEDOR + ESTADO + ORIGEN
 function aggregate(records) {
     const map = {};
     records.forEach(r => {
-        const name = r['NOMBRE DE PROVEEDOR'] || 'N/D';
-        const transStatus = statusOf(r['ESTADO']);
-
-        // Identificar origen limpio (DP o CDS)
-        const rawOrig = String(r['Informacion de Origen'] || 'N/D').toUpperCase();
+        const name = r['NOMBRE DE PROVEEDOR'] || r['Proveedor'] || 'N/D';
+        const transStatus = statusOf(r['ESTADO'] || r['Estado LPN']);
+        const rawOrig = String(r['Informacion de Origen'] || r['INFORMACION DE ORIGEN'] || 'N/D').toUpperCase();
         const orig = rawOrig.includes('DP') ? 'DP' : (rawOrig.includes('CDS') ? 'CDS' : rawOrig);
 
-        // La clave ahora une el nombre, el estado traducido y el origen exacto
         const k = `${name}|||${transStatus}|||${orig}`;
 
         if (!map[k]) {
             map[k] = { name, env: 0, rec: 0, sku: 0, estado: transStatus, origen: orig };
         }
         map[k].env += toN(r['Suma de Recuento de LPN enviadas']);
-        map[k].rec += toN(r['Suma de Recuento de LPN recibidas']);
+        map[k].rec += toN(r['Suma de Recuento de LPN recibidas'] || r['Cant recib']);
         map[k].sku += toN(r['SKU TOTALES']);
     });
 
-    const filteredItems = Object.values(map).filter(item => {
-        // Si hay filtro por proveedor seleccionado, se exponen todas sus divisiones logísticas
-        if (currentProvFilter !== 'ALL') return true;
-
-        // En vista general, ocultamos las divisiones que ya terminaron o están verificadas
-        const pct = item.env > 0 ? (item.rec / item.env) * 100 : 0;
-        return pct < 100 && item.estado !== 'VERIFICADO';
-    });
+    const filteredItems = Object.values(map);
 
     return filteredItems.sort((a, b) => b.env - a.env);
 }
@@ -319,49 +336,50 @@ function buildRows(items) {
 
         let origColor = item.origen.includes('DP') ? '#00e5ff' : '#ffff00';
 
-        return `<div class="trow">
-    <span class="c-prov" style="flex: 2;" title="${item.name}">${item.name}</span>
-    <span class="c-est" style="flex: 1.5;"><span class="pill ${pillClass}">${stLbl}</span></span>
-    <span class="c-orig" style="flex: 0.8; color: ${origColor}; font-weight: 700;">${item.origen}</span>
-    <span class="c-sku" style="flex: 0.6;">${fmt(item.sku)}</span>
-    <span class="c-rec" style="flex: 0.8;">${fmt(item.rec)}</span>
-    <span class="c-env" style="flex: 0.8;">${fmt(item.env)}</span>
-    <div class="t-bar-wrap" style="flex: 1.5;">
-        <span class="t-bar-pct" style="color: #39FF14;">${w}%</span>
-        <div class="t-bar-bg">
-            <div class="t-bar-fill neon-moving-bar" style="width:${w}%"></div>
-        </div>
-    </div>
-</div>`;
+        return `<div class="trow" onclick="openOperatorsModal('${item.name.replace(/'/g, "\\'")}', '${stLbl}', '${item.origen}')">
+            <span class="c-prov" style="flex: 2;" title="${item.name}">${item.name}</span>
+            <span class="c-est" style="flex: 1.5;"><span class="pill ${pillClass}">${stLbl}</span></span>
+            <span class="c-orig" style="flex: 0.8; color: ${origColor}; font-weight: 700;">${item.origen}</span>
+            <span class="c-sku" style="flex: 0.6;">${fmt(item.sku)}</span>
+            <span class="c-rec" style="flex: 0.8;">${fmt(item.rec)}</span>
+            <span class="c-env" style="flex: 0.8;">${fmt(item.env)}</span>
+            <div class="t-bar-wrap" style="flex: 1.5;">
+                <span class="t-bar-pct" style="color: #39FF14;">${w}%</span>
+                <div class="t-bar-bg">
+                    <div class="t-bar-fill neon-moving-bar" style="width:${w}%"></div>
+                </div>
+            </div>
+        </div>`;
     }).join('');
 }
 
 let tableScrollRaf = null;
 let tableScrollPos = 0;
 
+// ════════════ CORRECCIÓN CRÍTICA: SCROLL INFINITO PERMANENTE CON FILTROS ════════════
 function updateTable(records) {
     const track = document.getElementById('table-body');
     const wrapper = document.querySelector('.table-scroll-wrapper');
     if (!track || !wrapper) return;
 
     const ents = aggregate(records);
-    if (ents.length === 0) { track.innerHTML = ''; return; }
+
+    // Si no hay datos, limpiamos pista y matamos animación
+    if (ents.length === 0) {
+        track.innerHTML = '';
+        track.classList.remove('infinite-scroll-running');
+        if (tableScrollRaf) cancelAnimationFrame(tableScrollRaf);
+        return;
+    }
 
     const html = buildRows(ents);
     track.innerHTML = html;
 
-    // Solo corre animación si el visor general contiene más de un registro activo
-    if (currentProvFilter !== 'ALL' || ents.length <= 1) {
-        if (tableScrollRaf) cancelAnimationFrame(tableScrollRaf);
-        wrapper.scrollTop = 0;
-        wrapper.onmouseenter = null;
-        wrapper.onmouseleave = null;
-        return;
-    }
-
+    // Condición de repetición infinita: si hay pocos elementos, igual clonamos para llenar la pantalla
     requestAnimationFrame(() => {
         let originalHeight = track.offsetHeight;
         if (originalHeight > 0) {
+            // Forzamos al menos 2 copias idénticas para garantizar armonía de repetición infinita limpia
             let requiredCopies = Math.ceil((wrapper.offsetHeight * 2) / originalHeight);
             if (requiredCopies < 2) requiredCopies = 2;
             let extraHtml = '';
@@ -372,8 +390,11 @@ function updateTable(records) {
 
         if (tableScrollRaf) cancelAnimationFrame(tableScrollRaf);
 
+        // Agregamos la clase de animación fluida nativa
+        track.classList.add('infinite-scroll-running');
+
         function animateScroll() {
-            tableScrollPos += 1.5;
+            tableScrollPos += 1.2; // Velocidad fluida y balanceada
             wrapper.scrollTop = Math.round(tableScrollPos);
             const limit = parseFloat(track.dataset.origHeight || 0);
             if (limit > 0 && tableScrollPos >= limit) {
@@ -389,6 +410,185 @@ function updateTable(records) {
     });
 }
 
+
+// ═════════════════════════════════════════════════════════════════════════
+// 4. CRUCE AVANZADO ENTRE AMBAS BASES DE DATOS (CORREGIDO: ALINEACIÓN HORIZONTAL IMPECABLE)
+// ═════════════════════════════════════════════════════════════════════════
+function openOperatorsModal(provName, status, origin) {
+    const modalWrap = document.getElementById('gala-overlay');
+    const titleEl = document.getElementById('gala-target-prov');
+    const contentEl = document.getElementById('gala-content');
+
+    if (!modalWrap || !contentEl) return;
+
+    const targetProvUpper = provName.trim().toUpperCase();
+    titleEl.textContent = `${provName} • [${origin}] • ${status}`;
+
+    const selectedDateDropdown = document.getElementById('dateFilter').value;
+    let targetDate = selectedDateDropdown;
+    if (selectedDateDropdown === 'AUTO') {
+        targetDate = todayStr();
+    }
+
+    const operariosAsignados = pndRecords.filter(r => {
+        const provFB2 = String(r['NOMBRE DE PROVEEDOR'] || r['Proveedor'] || '').trim().toUpperCase();
+        const dateFB2 = String(r['Fecha Personal 1'] || r['FECHA'] || '').trim();
+        const rawOrigFB2 = String(r['Informacion de Origen'] || r['INFORMACION DE ORIGEN'] || '').toUpperCase();
+        const origFB2 = rawOrigFB2.includes('DP') ? 'DP' : (rawOrigFB2.includes('CDS') ? 'CDS' : '');
+
+        const matchProv = (provFB2 === targetProvUpper);
+        const matchDate = (dateFB2 === targetDate || !dateFB2 || selectedDateDropdown === 'ALL');
+        const matchOrig = (origFB2 === origin.toUpperCase());
+
+        return matchProv && matchDate && matchOrig;
+    });
+
+    const totalLpnProv = operariosAsignados.reduce((acc, r) => acc + toN(r['Suma de Recuento de LPN recibidas'] || r['Cant recib']), 0);
+
+    const opMap = {};
+
+    operariosAsignados.forEach(r => {
+        let rawUser = r['usuario_id'] || r['USUARIO RECEPCION'] || r['Usuario'] || 'ANONIMO';
+        let opKey = String(rawUser).trim();
+        let normalizedPhotoKey = opKey.toLowerCase().replace(/\./g, '-');
+        let cleanDisplayName = opKey.toUpperCase();
+
+        const lpn = toN(r['Suma de Recuento de LPN recibidas'] || r['Cant recib']);
+        const sku = toN(r['SKU TOTALES'] || 1);
+        const timeStr = String(r['HORA RECEPCION'] || r['Fe y Hr MOD'] || '').trim();
+
+        let timeOnly = '';
+        if (timeStr) {
+            let matchTime = timeStr.match(/(\d{2}:\d{2}:\d{2})/);
+            if (matchTime) {
+                timeOnly = matchTime[1];
+            } else {
+                let matchShortTime = timeStr.match(/(\d{2}:\d{2})/);
+                timeOnly = matchShortTime ? matchShortTime[1] : timeStr;
+            }
+        }
+
+        if (!opMap[opKey]) {
+            opMap[opKey] = {
+                name: cleanDisplayName,
+                photoKey: normalizedPhotoKey,
+                lpn: 0,
+                sku: 0,
+                firstTime: timeOnly,
+                lastTime: timeOnly,
+                directPhoto: r['usuario_foto'] || r['Usuario_Foto'] || ''
+            };
+        }
+
+        opMap[opKey].lpn += lpn;
+        opMap[opKey].sku += sku;
+
+        if (timeOnly) {
+            if (!opMap[opKey].firstTime || timeOnly < opMap[opKey].firstTime) opMap[opKey].firstTime = timeOnly;
+            if (!opMap[opKey].lastTime || timeOnly > opMap[opKey].lastTime) opMap[opKey].lastTime = timeOnly;
+        }
+    });
+
+    const opList = Object.values(opMap);
+
+    if (opList.length === 0) {
+        contentEl.innerHTML = `<div style="color:var(--muted); text-align:center; width:100%; font-size:1.4rem; padding: 40px;">
+            No se detectaron transacciones de operarios para esta orden específica en FB2.</div>`;
+    } else {
+        contentEl.innerHTML = opList.map(op => {
+            const partPct = totalLpnProv > 0 ? ((op.lpn / totalLpnProv) * 100).toFixed(1) : '0.0';
+            const finalPhotoUrl = op.directPhoto ? op.directPhoto : `https://i.postimg.cc/${op.photoKey}.jpg`;
+
+            // REVERSIÓN ESTRUCTURAL COMPLETA: Foto redonda clásica aislada a la izquierda con flexbox nativo
+            return `
+                <div class="op-card-premium" style="display: flex !important; flex-direction: row !important; align-items: center !important; padding: 24px !important; position: relative; gap: 25px;">
+                    <div class="op-avatar-premium-zone" style="position: relative; flex-shrink: 0; width: 100px; height: 100px;">
+                        <img src="${finalPhotoUrl}" 
+                             style="width: 100% !important; height: 100% !important; object-fit: cover !important; border-radius: 50% !important; border: 3px solid #00e5ff !important; box-shadow: 0 0 15px rgba(0,229,255,0.4);" 
+                             alt="${op.name}" 
+                             onerror="this.onerror=null; this.parentNode.innerHTML='<div style=\\'width:100px; height:100px; display:flex; align-items:center; justify-content:center; border:3px solid #00e5ff; border-radius:50%; background:#020b14;\\'><i class=\\'fas fa-user-shield\\' style=\\'font-size: 40px; color: #4a6878;\\'></i></div>';">
+                        <div class="op-badge-part-premium" style="position: absolute !important; bottom: -12px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 99 !important;">${partPct}% PART.</div>
+                    </div>
+                    
+                    <div class="op-info-premium" style="flex-grow: 1; display: flex; flex-direction: column; gap: 10px;">
+                        <div class="op-name-premium">${op.name}</div>
+                        
+                        <div class="op-stats-premium-row">
+                            <div class="op-stat-premium-box bg-glow-lpn">
+                                <span class="op-stat-premium-label">LPN RECIBIDOS</span>
+                                <span class="op-stat-premium-value text-neon-green">${fmt(op.lpn)}</span>
+                            </div>
+                            <div class="op-stat-premium-box bg-glow-sku">
+                                <span class="op-stat-premium-label">SKUS ÚNICOS</span>
+                                <span class="op-stat-premium-value text-neon-yellow">${fmt(op.sku)}</span>
+                            </div>
+                        </div>
+                        
+                        <div class="op-time-premium-bar">
+                            <span class="op-time-label"><i class="far fa-clock"></i> RANGO OPERATIVO:</span>
+                            <span class="op-time-value">${op.firstTime || 'N/D'} a ${op.lastTime || 'N/D'}</span>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    }
+
+    modalWrap.classList.remove('gala-hidden');
+}
+
+function closeOperatorsModal() {
+    document.getElementById('gala-overlay').classList.add('gala-hidden');
+}
+
+document.getElementById('gala-close').addEventListener('click', closeOperatorsModal);
+document.getElementById('gala-overlay').addEventListener('click', (e) => {
+    if (e.target.id === 'gala-overlay' || e.target.id === 'gala-background') {
+        closeOperatorsModal();
+    }
+});
+
+
+// ═════════════════════════════════════════════════════════════════════════
+// 5. ESCUCHAS EN TIEMPO REAL PARALELOS (AMBOS FIREBASE ESCUCHANDO JUNTOS)
+// ═════════════════════════════════════════════════════════════════════════
+
+dbAvance.ref('datos_dashboard').on('value', snap => {
+    const raw = snap.val();
+    allRecords = raw ? (Array.isArray(raw) ? raw : Object.values(raw)).filter(Boolean) : [];
+    populateDates(allRecords);
+    populateProviders(allRecords);
+    render();
+
+    const ov = document.getElementById('loading');
+    if (ov && !ov.classList.contains('gone')) setTimeout(() => ov.classList.add('gone'), 500);
+}, err => { console.error("Error en FB1 (Avance):", err); });
+
+dbProductividad.ref().on('value', snap => {
+    const raw = snap.val();
+    if (raw) {
+        if (Array.isArray(raw)) {
+            pndRecords = raw.filter(Boolean);
+        } else {
+            let processed = [];
+            Object.values(raw).forEach(node => {
+                if (node && typeof node === 'object') {
+                    if (Array.isArray(node)) { processed.push(...node); }
+                    else if (node['NOMBRE DE PROVEEDOR'] || node['Proveedor']) { processed.push(node); }
+                    else { processed.push(...Object.values(node)); }
+                }
+            });
+            pndRecords = processed.filter(Boolean);
+        }
+    } else {
+        pndRecords = [];
+    }
+}, err => { console.error("Error en FB2 (Productividad):", err); });
+
+
+// ═════════════════════════════════════════════════════════════════════════
+// 6. ANIMACIONES DE FONDO Y FILTROS RESTANTES
+// ═════════════════════════════════════════════════════════════════════════
 function initBackground() {
     const canvas = document.getElementById('bg');
     if (!canvas) return;
@@ -402,45 +602,24 @@ function initBackground() {
     const draw = () => {
         t += 0.0096;
         ctx.clearRect(0, 0, W, H);
-
         const waves = [
             { col: '#00e5ff', amp: H * .05, freq: .004, ph: t * 0.8, y: H * .08 },
             { col: '#00ff88', amp: H * .06, freq: .005, ph: t * 1.2, y: H * .14 },
             { col: '#e040fb', amp: H * .07, freq: .003, ph: t * 1.5, y: H * .20 },
             { col: '#00e5ff', amp: H * .09, freq: .003, ph: t, y: H * .28 },
             { col: '#e040fb', amp: H * .12, freq: .005, ph: t * 1.5, y: H * .36 },
-            { col: '#00ff88', amp: H * .07, freq: .008, ph: t * 2.2, y: H * .44 },
-            { col: '#00e5ff', amp: H * .08, freq: .004, ph: t * 1.1, y: H * .52 },
-            { col: '#ffff00', amp: H * .10, freq: .006, ph: t * 0.9, y: H * .60 },
-            { col: '#00ff88', amp: H * .08, freq: .005, ph: t * 1.3, y: H * .70 },
-            { col: '#00e5ff', amp: H * .11, freq: .003, ph: t * 0.7, y: H * .80 },
-            { col: '#e040fb', amp: H * .09, freq: .006, ph: t * 1.8, y: H * .90 },
-            { col: '#00ff88', amp: H * .06, freq: .004, ph: t * 1.1, y: H * .96 }
+            { col: '#00ff88', amp: H * .07, freq: .008, ph: t * 2.2, y: H * .44 }
         ];
-
         waves.forEach(w => {
             ctx.beginPath(); ctx.moveTo(0, w.y);
             for (let x = 0; x <= W; x += 4) {
-                const noise = Math.sin(x * w.freq + w.ph) * w.amp
-                    + Math.sin(x * w.freq * 2.5 + w.ph * 1.5) * w.amp * 0.4
-                    + Math.sin(x * w.freq * 4.5 + w.ph * 0.8) * w.amp * 0.2;
+                const noise = Math.sin(x * w.freq + w.ph) * w.amp;
                 ctx.lineTo(x, w.y + noise);
             }
             ctx.strokeStyle = w.col; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.5;
             ctx.shadowColor = w.col; ctx.shadowBlur = 20;
-            ctx.stroke();
-            ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+            ctx.stroke(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
         });
-
-        for (let i = 0; i < 30; i++) {
-            const px = (Math.sin(i * 7.1 + t * 0.4) * 0.5 + 0.5) * W;
-            const py = (Math.cos(i * 3.3 + t * 0.6) * 0.5 + 0.5) * H;
-            ctx.fillStyle = i % 2 === 0 ? '#e040fb' : '#00e5ff';
-            ctx.globalAlpha = 0.2;
-            ctx.beginPath(); ctx.arc(px, py, 1.5, 0, Math.PI * 2); ctx.fill();
-        }
-
-        ctx.globalAlpha = 1;
         requestAnimationFrame(draw);
     };
     requestAnimationFrame(draw);
@@ -455,51 +634,25 @@ function render() {
     updateTable(records);
 }
 
-db.ref('datos_dashboard').on('value', snap => {
-    const raw = snap.val();
-    allRecords = raw ? (Array.isArray(raw) ? raw : Object.values(raw)).filter(Boolean) : [];
-    populateDates(allRecords);
-    populateProviders(allRecords);
-    render();
-    const ov = document.getElementById('loading');
-    if (ov && !ov.classList.contains('gone')) setTimeout(() => ov.classList.add('gone'), 500);
-}, err => {
-    console.error(err);
-});
+document.getElementById('dateFilter').addEventListener('change', () => { populateProviders(allRecords); render(); });
+document.getElementById('provFilter').addEventListener('change', (e) => { currentProvFilter = e.target.value; render(); });
 
-document.getElementById('dateFilter').addEventListener('change', () => {
+document.getElementById('statusFilter').addEventListener('change', (e) => {
+    currentStatusFilter = e.target.value;
     populateProviders(allRecords);
-    render();
-});
-
-document.getElementById('provFilter').addEventListener('change', (e) => {
-    currentProvFilter = e.target.value;
     render();
 });
 
 function toggleFilter(type) {
     const btnDP = document.getElementById('btnFilterDP');
     const btnCDS = document.getElementById('btnFilterCDS');
-
     if (currentOriginFilter === type) {
         currentOriginFilter = 'ALL';
-        btnDP.style.opacity = '1';
-        btnDP.style.transform = 'scale(1)';
-        btnCDS.style.opacity = '1';
-        btnCDS.style.transform = 'scale(1)';
+        btnDP.style.opacity = '1'; btnCDS.style.opacity = '1';
     } else {
         currentOriginFilter = type;
-        if (type === 'DP') {
-            btnDP.style.opacity = '1';
-            btnDP.style.transform = 'scale(1.03)';
-            btnCDS.style.opacity = '0.4';
-            btnCDS.style.transform = 'scale(0.97)';
-        } else {
-            btnCDS.style.opacity = '1';
-            btnCDS.style.transform = 'scale(1.03)';
-            btnDP.style.opacity = '0.4';
-            btnDP.style.transform = 'scale(0.97)';
-        }
+        if (type === 'DP') { btnDP.style.opacity = '1'; btnCDS.style.opacity = '0.4'; }
+        else { btnCDS.style.opacity = '1'; btnDP.style.opacity = '0.4'; }
     }
     populateProviders(allRecords);
     render();
@@ -509,14 +662,9 @@ document.getElementById('btnFilterDP').addEventListener('click', () => toggleFil
 document.getElementById('btnFilterCDS').addEventListener('click', () => toggleFilter('CDS'));
 
 const btnHome = document.getElementById('btnHome');
-if (btnHome) {
-    btnHome.onclick = () => {
-        window.location.href = 'https://portal-maestro.vercel.app/';
-    };
-}
+if (btnHome) btnHome.onclick = () => { window.location.href = 'https://portal-maestro.vercel.app/'; };
 
 window.addEventListener('resize', sizeGauge);
-
 initBackground();
 initBubbles();
 requestAnimationFrame(() => requestAnimationFrame(sizeGauge));
