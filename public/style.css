@@ -144,20 +144,19 @@ body {
   overflow: hidden;
 }
 
-/* Glass Panels */
+/* Glass Panels original estilizado (Revertido y Asegurado) */
 .glass {
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  border-radius: 14px;
+  background: rgba(6, 11, 25, 0.85) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border-radius: 14px !important;
   position: relative;
   overflow: hidden;
-  /* Borde con un poco más de luz y sombra de brillo (glow) */
   border: 2px solid rgba(0, 229, 255, 0.5) !important;
-  box-shadow: 0 0 40px rgba(0, 229, 255, 0.4), inset 0 0 20px rgba(0, 229, 255, 0.2) !important;
+  box-shadow: 0 0 40px rgba(0, 229, 255, 0.3), inset 0 0 20px rgba(0, 229, 255, 0.15) !important;
 }
 
-/* ══ SYNC LASER (Cada 3 segundos en todos lados a la vez) ══ */
+/* ══ SYNC LASER ══ */
 .sync-laser::after {
   content: '';
   position: absolute;
@@ -174,7 +173,6 @@ body {
   z-index: 10;
 }
 
-/* 1s visible (33%), 2s invisible (66%). Total 3s */
 @keyframes sLaser {
   0% {
     --ang: 0deg;
@@ -202,8 +200,6 @@ body {
 }
 
 /* ══ FILA SUPERIOR: KPIs (20%) ══ */
-
-
 .kpi {
   display: flex;
   flex-direction: column;
@@ -237,97 +233,54 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.k-org {
-  color: #00BCD4;
-  text-shadow: 0 0 12px rgba(0, 188, 212, 0.8), 0 0 25px rgba(0, 188, 212, 0.4) !important;
-}
-
-.k-cya {
-  color: #00BCD4;
-  text-shadow: 0 0 12px rgba(0, 188, 212, 0.8), 0 0 25px rgba(0, 188, 212, 0.4) !important;
-}
-
-.k-grn {
-  color: #00BCD4;
-  text-shadow: 0 0 12px rgba(0, 188, 212, 0.8), 0 0 25px rgba(0, 188, 212, 0.4) !important;
-}
-
+.k-org,
+.k-cya,
+.k-grn,
 .k-mag {
-  color: #00BCD4;
-  text-shadow: 0 0 12px rgba(0, 188, 212, 0.8), 0 0 25px rgba(0, 188, 212, 0.4) !important;
+  color: #00e5ff;
+  text-shadow: 0 0 12px rgba(0, 229, 255, 0.8), 0 0 25px rgba(0, 229, 255, 0.4) !important;
 }
 
 /* ══ FILA CENTRAL: GRÁFICOS (40%) ══ */
-
-
-/* Busca tu ID actual del contenedor negro */
 #colGauge {
   padding: 0 !important;
-  /* Elimina cualquier espaciado interno residual */
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  /* ESTA ES LA CLAVE: cualquier cosa que se salga de este cuadro, se oculta */
   z-index: 10;
-
-  /* SI TIENES ESTO, BORRALO O COMENTALO (Ponle /* delante): */
-  /* height: 25vh;  O cualquier valor fijo como 300px */
-
-  /* AHORA ASEGÚRATE DE TENER ESTO PARA QUE USE TODO EL ALTO DE LA FILA SUPERIOR: */
   height: 100%;
-  /* O usa height: 40vh; si quieres fijar la altura de la fila completa */
 }
 
-/* El canvas ahora se queda dentro de su caja */
 #gaugeCanvas {
   display: block;
   max-width: 100%;
   max-height: 100%;
-
-  /* Esto ayuda a que el resplandor (glow) no se corte al rozar el borde */
   filter: drop-shadow(0px 0px 5px rgba(0, 229, 255, 0.3));
 }
 
-/* COL 2: BATTERIES */
 #colBats {
   flex: 2;
   display: flex;
   flex-direction: column !important;
-  /* Apilamos DP sobre CDS */
   justify-content: center;
   gap: 3vh;
-  /* Espacio entre las dos barras horizontales */
   padding: 2vh 3vw;
 }
 
 .vbat {
   width: 100% !important;
   height: 240px !important;
-  /* Aumentamos la altura del contenedor */
   display: flex !important;
   align-items: center !important;
   margin-bottom: 20px !important;
 }
 
-/* Etiquetas DP y CDS */
-.dp-lbl {
-  font-size: 55px !important;
-  /* Letras más grandes */
-  min-width: 120px !important;
-  font-weight: 900 !important;
-  color: #00e5ff !important;
-  /* Celeste DP */
-  text-shadow: 0 0 20px #00e5ff;
-}
-
+.dp-lbl,
 .cds-lbl {
   font-size: 55px !important;
   min-width: 120px !important;
   font-weight: 900 !important;
-  color: #ffff00 !important;
-  /* Amarillo CDS */
-  text-shadow: 0 0 20px #ffff00;
 }
 
 .dp-lbl {
@@ -340,10 +293,8 @@ body {
   text-shadow: 0 0 20px var(--green);
 }
 
-/* El "tanque" o fondo de la barra */
 .vbat-tank {
   height: 100px !important;
-  /* Grosor de la barra aumentado */
   flex-grow: 1;
   border-radius: 15px !important;
   background: rgba(0, 0, 0, 0.7) !important;
@@ -373,24 +324,14 @@ body {
 
 .bg-cyan {
   background: linear-gradient(90deg, #008ba3, #00e5ff) !important;
-  /* Celeste DP */
   box-shadow: 0 0 30px rgba(0, 229, 255, 0.6);
 }
 
 .bg-neon {
   background: linear-gradient(90deg, #b2b200, #ffff00) !important;
-  /* Amarillo CDS */
   box-shadow: 0 0 30px rgba(255, 255, 0, 0.6);
 }
 
-.vbat-wave {
-  width: 100%;
-  height: 10px;
-  flex-shrink: 0;
-  transform: translateY(-9px);
-}
-
-/* Centered Text Logic inside Battery - SUPER Contraste */
 .v-txt-wrap {
   position: absolute;
   inset: 0;
@@ -403,7 +344,6 @@ body {
 
 .v-info-side {
   width: 18% !important;
-  /* Subimos de 12% a 18% para alejarlo del tanque */
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -411,16 +351,12 @@ body {
   gap: 0.5vh;
 }
 
-/* Numerador Ej. 150/170 con fondo oscuro solido y letras impecablemente legibles */
 .v-num {
   font-size: 1.3vw !important;
-  /* Subimos de 1.1vw a 1.3vw */
   font-weight: 800;
   color: #fff;
   background: rgba(0, 0, 0, 0.8);
-  /* Fondo más sólido para que no se pierda */
   padding: 8px 16px;
-  /* Más relleno para que sea un cuadro más robusto */
   border-radius: 8px;
   border: 1px solid currentColor;
   box-shadow: 0 0 10px currentColor;
@@ -428,10 +364,8 @@ body {
   white-space: nowrap;
 }
 
-/* Porcentaje grande flotando dentro del tanque */
 .v-pct {
   font-size: 40px !important;
-  /* Porcentaje más visible */
   font-weight: 900 !important;
   color: #fff !important;
   text-shadow: 0 0 10px rgba(0, 0, 0, 0.8);
@@ -446,36 +380,6 @@ body {
   text-shadow: 0 0 10px rgba(0, 0, 0, 1), 0 0 20px var(--green) !important;
 }
 
-
-.bubbles {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-}
-
-.bub {
-  position: absolute;
-  background: rgba(255, 255, 255, .4);
-  border-radius: 50%;
-  animation: bubUp linear infinite;
-}
-
-@keyframes bubUp {
-  0% {
-    left: 0;
-    opacity: 0.8;
-    transform: translateY(0);
-  }
-
-  100% {
-    left: 100%;
-    opacity: 0;
-    transform: translateY(var(--dy));
-  }
-}
-
-
-/* COL 3: TABLE (40%) */
 /* ══ FILA INFERIOR: TABLA (40%) ══ */
 #bottomRow {
   flex: 1;
@@ -493,12 +397,9 @@ body {
 #tHeadWrap {
   position: relative;
   background: linear-gradient(90deg, transparent, rgba(0, 229, 255, 0.1), transparent);
-  border-bottom: none;
-  /* Quitamos el borde solido porque ahora tiene onda */
   padding: 1.5vh 1vw;
   flex-shrink: 0;
 }
-
 
 #tHeadRow {
   display: grid;
@@ -516,13 +417,7 @@ body {
   text-align: center;
 }
 
-#tblVp {
-  flex: 1;
-  overflow: hidden;
-  position: relative;
-}
-
-
+/* Contenedor del Scroll Infinito Activo con Filtros */
 .table-scroll-wrapper {
   width: 100%;
   height: 100%;
@@ -533,10 +428,29 @@ body {
 #table-body {
   display: flex;
   flex-direction: column;
-  position: absolute;
-  top: 0;
-  left: 0;
   width: 100%;
+}
+
+/* Clase de animación asignada dinámicamente vía JS para que nunca deje de moverse */
+.infinite-scroll-running {
+  animation: tableMove linear infinite;
+}
+
+@keyframes tableMove {
+  0% {
+    transform: translateY(0);
+  }
+
+  100% {
+    transform: translateY(-50%);
+  }
+
+  /* Mueve exactamente la mitad clonada */
+}
+
+/* Pausa suave en hover para interactuar */
+.table-scroll-wrapper:hover #table-body.infinite-scroll-running {
+  animation-play-state: paused;
 }
 
 .trow {
@@ -545,9 +459,19 @@ body {
   padding: 1.5vh 1vw;
   border-bottom: 1px solid rgba(255, 255, 255, 0.05);
   align-items: center;
+  transition: all 0.3s ease;
+  cursor: pointer;
+  background: transparent;
 }
 
-/* Numerics and Text */
+.trow:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+  box-shadow: inset 0 0 20px rgba(0, 229, 255, 0.2);
+  transform: scale(1.01) translateX(5px);
+  border-left: 4px solid #00e5ff;
+  z-index: 10;
+}
+
 .trow span {
   font-size: 1.1vw;
   font-family: 'Inter', sans-serif;
@@ -582,7 +506,7 @@ body {
   font-weight: 800;
 }
 
-/* Status Pills */
+/* Status Pills (Eliminado .pill-pen / PENDIENTE) */
 .pill {
   padding: 4px 12px;
   border-radius: 20px;
@@ -591,6 +515,7 @@ body {
   display: inline-block;
   text-align: center;
   margin: 0 auto;
+  white-space: nowrap;
 }
 
 .pill-ver {
@@ -621,10 +546,10 @@ body {
   box-shadow: 0 0 10px rgba(255, 112, 32, 0.4);
 }
 
-.pill-pen {
-  background: rgba(158, 158, 158, 0.15);
-  color: #9E9E9E;
-  border: 1px solid rgba(158, 158, 158, 0.5);
+.c-est {
+  display: flex;
+  justify-content: center;
+  min-width: 140px;
 }
 
 /* Progress Neon Bar */
@@ -637,51 +562,14 @@ body {
 
 .t-bar-pct {
   color: #39FF14 !important;
-  /* Verde Neón */
   font-weight: bold;
   text-shadow: 0 0 5px rgba(57, 255, 20, 0.5);
-}
-
-/* Animación de "brillo" moviéndose en las barras */
-.neon-moving-bar {
-  background: linear-gradient(90deg, #00e5ff, #39FF14, #00e5ff);
-  background-size: 200% 100%;
-  animation: moveGradient 2s linear infinite;
-  box-shadow: 0 0 10px rgba(57, 255, 20, 0.7);
-  height: 100%;
-  border-radius: 4px;
-}
-
-@keyframes moveGradient {
-  0% {
-    background-position: 200% 0;
-  }
-
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-/* Ajuste para que el texto de ESTADO no se corte */
-.c-est {
-  display: flex;
-  justify-content: center;
-  min-width: 140px;
-  /* Asegura espacio para "RECEPCIÓN COMPLETA" */
-}
-
-.pill {
-  white-space: nowrap;
-  /* Evita que el texto salte de línea */
-  padding: 2px 8px;
-  font-size: 0.85em;
 }
 
 .t-bar-bg {
   flex: 1;
   height: 8px;
   background: rgba(255, 255, 255, 0.05) !important;
-  /* Fondo de barra muy tenue */
   border-radius: 4px;
   position: relative;
   overflow: hidden;
@@ -707,10 +595,9 @@ body {
   }
 }
 
-/* --- EFECTO DE ONDAS DASHBOARD VLADY --- */
+/* ══ EFECTO DE ONDAS EFICIENTE ══ */
 .ocean {
   height: 15%;
-  /* Ajusta según qué tan alto quieras el efecto */
   width: 100%;
   position: absolute;
   bottom: 0;
@@ -718,7 +605,6 @@ body {
   background: transparent;
   overflow: hidden;
   z-index: -1;
-  /* Se mantiene detrás de los datos */
 }
 
 .wave {
@@ -730,13 +616,12 @@ body {
   animation: wave 7s cubic-bezier(0.36, 0.45, 0.63, 0.53) infinite;
   transform: translate3d(0, 0, 0);
   opacity: 0.3;
-  /* Transparencia para que no opaque los datos */
 }
 
 .wave:nth-of-type(2) {
   top: -175px;
   animation: wave 7s cubic-bezier(0.36, 0.45, 0.63, 0.53) -.125s infinite, swell 7s ease -1.25s infinite;
-  opacity: 1;
+  opacity: 0.15;
 }
 
 @keyframes wave {
@@ -761,42 +646,268 @@ body {
   }
 }
 
-/* Aplicación a los encabezados y KPIs */
-.wavy-header,
-.summary-box {
-  background: linear-gradient(180deg, rgba(30, 41, 59, 0.8) 0%, rgba(15, 23, 42, 0.9) 100%);
-  position: relative;
-  overflow: hidden;
+/* ══ ESTILOS PREMIUM CORREGIDOS PARA MODAL DE OPERADORES ══ */
+#gala-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  visibility: visible;
+  transition: opacity 0.4s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.4s;
 }
 
-/* Pseudo-elemento para simular la onda en los boxes */
-.summary-box::after {
-  content: "";
+#gala-overlay.gala-hidden {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#gala-background {
   position: absolute;
-  bottom: -10px;
-  left: 0;
-  width: 200%;
-  height: 20px;
-  background: url(https://s3-us-west-2.amazonaws.com/s.cdpn.io/85486/wave.svg) repeat-x;
-  opacity: 0.2;
-  animation: wave 10s linear infinite;
+  inset: 0;
+  background: rgba(2, 2, 5, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
-/* Efecto cuando el mouse pasa sobre una fila de la tabla */
-.trow {
-  transition: all 0.3s ease;
-  /* Para que el cambio de color sea suave */
+/* Volviendo al estilo de contenedor original redondeado y neón */
+.gala-modal {
+  position: relative;
+  width: 75vw;
+  max-width: 1400px;
+  max-height: 85vh;
+  background: rgba(6, 11, 25, 0.95) !important;
+  border-radius: 14px !important;
+  padding: 30px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  transform: scale(1);
+  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+  border: 2px solid rgba(0, 229, 255, 0.6) !important;
+  box-shadow: 0 0 50px rgba(0, 229, 255, 0.4), inset 0 0 25px rgba(0, 229, 255, 0.2) !important;
+}
+
+#gala-overlay.gala-hidden .gala-modal {
+  transform: scale(0.85);
+}
+
+.gala-header {
+  position: relative;
+  border-bottom: 1px solid rgba(0, 229, 255, 0.2);
+  padding-bottom: 15px;
+}
+
+.gala-header-title {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.8vw;
+  font-weight: 900;
+  color: #fff;
+  letter-spacing: 2px;
+}
+
+.gala-subtitle {
+  font-family: 'Montserrat', sans-serif;
+  font-size: 1.2vw;
+  font-weight: 700;
+  color: var(--cyan);
+  margin-top: 5px;
+  text-transform: uppercase;
+  text-shadow: 0 0 10px rgba(0, 229, 255, 0.5);
+}
+
+.gala-close-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 35px;
   cursor: pointer;
+  transition: color 0.2s, transform 0.2s;
 }
 
-.trow:hover {
-  background: rgba(255, 255, 255, 0.15) !important;
-  /* Un fondo gris traslúcido */
-  box-shadow: inset 0 0 20px rgba(0, 229, 255, 0.2);
-  /* Un resplandor interno cian */
-  transform: scale(1.01) translateX(5px);
-  /* Se agranda un pelín y se mueve a la derecha */
-  border-left: 4px solid #00e5ff;
-  /* Una barrita neón al inicio de la fila */
-  z-index: 10;
+.gala-close-btn:hover {
+  color: #ff3366;
+  transform: rotate(90deg);
+}
+
+#gala-content {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 10px 5px;
+  max-height: 65vh;
+  overflow-y: auto;
+}
+
+/* Personalización del Scroll Interno */
+#gala-content::-webkit-scrollbar {
+  width: 6px;
+}
+
+#gala-content::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.2);
+}
+
+#gala-content::-webkit-scrollbar-thumb {
+  background: var(--cyan);
+  border-radius: 4px;
+}
+
+/* ══ ZONA CRÍTICA CORREGIDA: Estructura Horizontal Impecable (Foto Izquierda - Info Derecha) ══ */
+.op-card-premium {
+  background: rgba(10, 18, 36, 0.7) !important;
+  border: 1px solid rgba(0, 229, 255, 0.25) !important;
+  border-radius: 12px !important;
+  display: flex !important;
+  flex-direction: row !important;
+  /* Asegura flujo horizontal estricto */
+  align-items: center !important;
+  padding: 24px !important;
+  position: relative;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  transition: all 0.3s ease;
+  overflow: visible !important;
+  /* Permite que el badge flote correctamente */
+}
+
+.op-card-premium:hover {
+  border-color: rgba(0, 229, 255, 0.6) !important;
+  box-shadow: 0 0 25px rgba(0, 229, 255, 0.2), inset 0 0 15px rgba(0, 229, 255, 0.1) !important;
+  transform: translateY(-2px);
+}
+
+/* Contenedor de la Foto a la izquierda aislado */
+.op-avatar-premium-zone {
+  position: relative !important;
+  margin-right: 30px !important;
+  flex-shrink: 0 !important;
+  display: block !important;
+}
+
+.op-img-premium {
+  width: 105px !important;
+  height: 105px !important;
+  border-radius: 50% !important;
+  object-fit: cover !important;
+  border: 3px solid var(--cyan) !important;
+  box-shadow: 0 0 15px rgba(0, 229, 255, 0.3) !important;
+  background: #020b14;
+}
+
+/* El Badge de Participación ahora se posiciona flotando de forma independiente y clara */
+.op-badge-part-premium {
+  position: absolute !important;
+  bottom: -10px !important;
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+  background: #00ffff !important;
+  color: #000 !important;
+  font-family: 'Orbitron', sans-serif !important;
+  font-weight: 900 !important;
+  font-size: 11px !important;
+  padding: 4px 12px !important;
+  border-radius: 20px !important;
+  box-shadow: 0 0 12px #00ffff !important;
+  letter-spacing: 1px !important;
+  white-space: nowrap !important;
+  z-index: 50 !important;
+}
+
+/* Bloque derecho con los datos del Operario */
+.op-info-premium {
+  flex-grow: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+}
+
+.op-name-premium {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #ffffff;
+  letter-spacing: 1px;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+}
+
+.op-stats-premium-row {
+  display: flex;
+  gap: 20px;
+}
+
+.op-stat-premium-box {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 8px;
+  padding: 10px 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border-left: 4px solid transparent;
+}
+
+.bg-glow-lpn {
+  border-left-color: #00ff88;
+  background: rgba(0, 255, 136, 0.02);
+}
+
+.bg-glow-sku {
+  border-left-color: #ffff00;
+  background: rgba(255, 255, 0, 0.02);
+}
+
+.op-stat-premium-label {
+  font-size: 0.75rem;
+  color: #8fa7b3;
+  letter-spacing: 1px;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+
+.op-stat-premium-value {
+  font-family: 'Inter', sans-serif;
+  font-size: 1.8rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.text-neon-green {
+  color: #00ff88;
+  text-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
+}
+
+.text-neon-yellow {
+  color: #ffff00;
+  text-shadow: 0 0 15px rgba(255, 255, 0, 0.3);
+}
+
+.op-time-premium-bar {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 8px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.op-time-label {
+  font-size: 0.8rem;
+  color: #638291;
+  font-weight: bold;
+  letter-spacing: 0.5px;
+}
+
+.op-time-value {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 0.95rem;
+  color: #a2c0cc;
+  font-weight: 700;
+  letter-spacing: 1px;
 }
