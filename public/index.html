@@ -13,7 +13,6 @@
 
 <body>
 
-  <!-- EFECTO OCÉANO DASHBOARD VLADY -->
   <div class="ocean">
     <div class="wave"></div>
     <div class="wave"></div>
@@ -25,7 +24,6 @@
 
   <canvas id="bg"></canvas>
 
-
   <div id="app"
     style="display: flex; flex-direction: column; height: 100vh; padding: 1vh 1vw; box-sizing: border-box; overflow: hidden;">
 
@@ -33,8 +31,7 @@
 
       <div class="glass" id="colGauge"
         style="flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; padding: 20px;">
-        
-        <!-- INTEGRATED NAVIGATION -->
+
         <div id="dateFilterWrap">
           <select id="dateFilter">
             <option value="AUTO">HOY</option>
@@ -74,7 +71,8 @@
 
         <div id="colBats" class="glass"
           style="flex: 1; display: flex; flex-direction: column; justify-content: space-evenly; padding: 1vh 2vw;">
-          <div class="vbat" style="display: flex; align-items: center; gap: 1vw;">
+          <div class="vbat" id="btnFilterDP"
+            style="display: flex; align-items: center; gap: 1vw; cursor: pointer; transition: transform 0.2s;">
             <div class="dp-lbl" style="font-size: 1.2vw !important; font-weight: 800; width: 3vw; color: #00e5ff;">DP
             </div>
             <div class="vbat-tank c-cyan"
@@ -92,7 +90,8 @@
             </div>
           </div>
 
-          <div class="vbat" style="display: flex; align-items: center; gap: 1vw;">
+          <div class="vbat" id="btnFilterCDS"
+            style="display: flex; align-items: center; gap: 1vw; cursor: pointer; transition: transform 0.2s;">
             <div class="cds-lbl" style="font-size: 1.2vw !important; font-weight: 800; width: 3vw; color: #b2ff00;">CDS
             </div>
             <div class="vbat-tank c-neon"
@@ -115,6 +114,17 @@
 
     <div id="bottomRow" style="flex: 1; min-height: 0;">
       <div class="glass" id="colTable" style="height: 100%; display: flex; flex-direction: column;">
+
+        <div style="display: flex; justify-content: space-between; align-items: center; padding: 1vh 1vw 0.5vh 1vw;">
+          <div
+            style="font-family: 'Orbitron', sans-serif; font-size: 0.9vw; font-weight: bold; color: #00e5ff; letter-spacing: 1px;">
+            MONITOR DE PRODUCTIVIDAD</div>
+          <select id="provFilter"
+            style="background: rgba(0, 0, 0, 0.6); border: 1px solid #00e5ff; color: #fff; font-family: 'Montserrat', sans-serif; font-size: 0.8vw; padding: 5px 15px; border-radius: 4px; cursor: pointer; outline: none; box-shadow: 0 0 10px rgba(0, 229, 255, 0.2); max-width: 20vw;">
+            <option value="ALL">TODOS LOS PROVEEDORES</option>
+          </select>
+        </div>
+
         <div id="tHeadWrap" class="wavy-header">
           <div id="tHeadRow">
             <span>NOMBRE DE PROVEEDOR</span>
