@@ -29,8 +29,8 @@ let allRecords = [];
 let pndRecords = [];
 
 let currentOriginFilter = 'ALL';
-let currentProvFilter = 'ALL';
-let currentStatusFilter = 'ALL';
+let currentProvFilters = [];   // Cambiado a Array para soporte multiselección
+let currentStatusFilters = ['RECEPCIÓN INICIADA', 'RECEPCIÓN COMPLETA', 'EN TRÁNSITO', 'VERIFICADO']; // Todos activos por defecto
 let gaugeTarget = 0, gaugeCur = 0;
 
 const toN = v => { const n = Number(String(v ?? '').replace(/,/g, '').trim()); return isNaN(n) ? 0 : n; };
@@ -61,8 +61,9 @@ function populateDates(records) {
 }
 
 function populateProviders(records) {
-    const sel = document.getElementById('provFilter');
-    const prev = sel.value;
+    const menu = document.getElementById('provDropdownMenu');
+    if (!menu) return;
+
     const dateVal = document.getElementById('dateFilter').value;
 
     let activeRecords = records;
@@ -81,16 +82,68 @@ function populateProviders(records) {
         });
     }
 
-    if (currentStatusFilter !== 'ALL') {
-        activeRecords = activeRecords.filter(r => statusOf(r['ESTADO'] || r['Estado LPN']) === currentStatusFilter);
-    }
+    // Filtrar la lista de proveedores basándose en los estados tildados actualmente
+    activeRecords = activeRecords.filter(r => currentStatusFilters.includes(statusOf(r['ESTADO'] || r['Estado LPN'])));
 
     const provs = [...new Set(activeRecords.map(r => r['NOMBRE DE PROVEEDOR']).filter(Boolean))].sort();
-    sel.innerHTML = '<option value="ALL">TODOS LOS PROVEEDORES</option>';
-    provs.forEach(p => { const o = document.createElement('option'); o.value = o.textContent = p; sel.appendChild(o); });
 
-    if (prev !== 'ALL' && provs.includes(prev)) { sel.value = prev; currentProvFilter = prev; }
-    else { sel.value = 'ALL'; currentProvFilter = 'ALL'; }
+    // Inyectar checkboxes dinámicos con estética Neon Cyan
+    menu.innerHTML = `
+        <label style="display: flex; align-items: center; gap: 8px; color: #00e5ff; font-weight: bold; cursor: pointer; padding: 4px 0; border-bottom: 1px solid rgba(0,229,255,0.2); margin-bottom: 4px; font-family: 'Montserrat', sans-serif;">
+            <input type="checkbox" id="selectAllProvs" ${currentProvFilters.length === 0 || currentProvFilters.includes('ALL') ? 'checked' : ''}> TODOS LOS PROVEEDORES
+        </label>
+    `;
+
+    provs.forEach(p => {
+        const isChecked = currentProvFilters.includes(p) || currentProvFilters.includes('ALL') || currentProvFilters.length === 0;
+        menu.innerHTML += `
+            <label style="display: flex; align-items: center; gap: 8px; color: #fff; cursor: pointer; padding: 2px 0; font-family: 'Montserrat', sans-serif;">
+                <input type="checkbox" class="prov-check" value="${p}" ${isChecked ? 'checked' : ''}> ${p}
+            </label>
+        `;
+    });
+
+    updateProvFiltersArray();
+}
+
+function updateStatusFiltersArray() {
+    const checkboxes = document.querySelectorAll('#statusDropdownMenu input[type="checkbox"]');
+    currentStatusFilters = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+
+    const btnText = document.querySelector('#statusDropdownBtn .btn-text');
+    if (currentStatusFilters.length === checkboxes.length) {
+        btnText.textContent = "TODOS LOS ESTADOS";
+    } else if (currentStatusFilters.length === 0) {
+        btnText.textContent = "NINGÚN ESTADO";
+    } else {
+        btnText.textContent = `${currentStatusFilters.length} ESTADOS SEL.`;
+    }
+}
+
+function updateProvFiltersArray() {
+    const selectAll = document.getElementById('selectAllProvs');
+    const checkboxes = document.querySelectorAll('.prov-check');
+    const btnText = document.querySelector('#provDropdownBtn .btn-text');
+    if (!btnText) return;
+
+    if (selectAll && selectAll.checked) {
+        currentProvFilters = ['ALL'];
+        checkboxes.forEach(cb => cb.checked = true);
+        btnText.textContent = "TODOS LOS PROVEEDORES";
+    } else {
+        const checked = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
+        currentProvFilters = checked;
+
+        if (checked.length === checkboxes.length && checkboxes.length > 0) {
+            if (selectAll) selectAll.checked = true;
+            currentProvFilters = ['ALL'];
+            btnText.textContent = "TODOS LOS PROVEEDORES";
+        } else if (checked.length === 0) {
+            btnText.textContent = "NINGÚN PROVEEDOR";
+        } else {
+            btnText.textContent = `${checked.length} PROV. SEL.`;
+        }
+    }
 }
 
 function getFiltered() {
@@ -109,12 +162,15 @@ function getFiltered() {
             return o.includes(currentOriginFilter);
         });
     }
-    if (currentProvFilter !== 'ALL') {
-        records = records.filter(r => r['NOMBRE DE PROVEEDOR'] === currentProvFilter);
+
+    // Filtro inteligente multi-selección de Proveedores
+    if (currentProvFilters.length > 0 && !currentProvFilters.includes('ALL')) {
+        records = records.filter(r => currentProvFilters.includes(r['NOMBRE DE PROVEEDOR']));
     }
-    if (currentStatusFilter !== 'ALL') {
-        records = records.filter(r => statusOf(r['ESTADO'] || r['Estado LPN']) === currentStatusFilter);
-    }
+
+    // Filtro inteligente multi-selección de Estados
+    records = records.filter(r => currentStatusFilters.includes(statusOf(r['ESTADO'] || r['Estado LPN'])));
+
     return records;
 }
 
@@ -318,7 +374,6 @@ function aggregate(records) {
     });
 
     const filteredItems = Object.values(map);
-
     return filteredItems.sort((a, b) => b.env - a.env);
 }
 
@@ -356,7 +411,6 @@ function buildRows(items) {
 let tableScrollRaf = null;
 let tableScrollPos = 0;
 
-// ════════════ CORRECCIÓN CRÍTICA: SCROLL INFINITO PERMANENTE CON FILTROS ════════════
 function updateTable(records) {
     const track = document.getElementById('table-body');
     const wrapper = document.querySelector('.table-scroll-wrapper');
@@ -364,7 +418,6 @@ function updateTable(records) {
 
     const ents = aggregate(records);
 
-    // Si no hay datos, limpiamos pista y matamos animación
     if (ents.length === 0) {
         track.innerHTML = '';
         track.classList.remove('infinite-scroll-running');
@@ -375,11 +428,9 @@ function updateTable(records) {
     const html = buildRows(ents);
     track.innerHTML = html;
 
-    // Condición de repetición infinita: si hay pocos elementos, igual clonamos para llenar la pantalla
     requestAnimationFrame(() => {
         let originalHeight = track.offsetHeight;
         if (originalHeight > 0) {
-            // Forzamos al menos 2 copias idénticas para garantizar armonía de repetición infinita limpia
             let requiredCopies = Math.ceil((wrapper.offsetHeight * 2) / originalHeight);
             if (requiredCopies < 2) requiredCopies = 2;
             let extraHtml = '';
@@ -389,12 +440,10 @@ function updateTable(records) {
         }
 
         if (tableScrollRaf) cancelAnimationFrame(tableScrollRaf);
-
-        // Agregamos la clase de animación fluida nativa
         track.classList.add('infinite-scroll-running');
 
         function animateScroll() {
-            tableScrollPos += 1.2; // Velocidad fluida y balanceada
+            tableScrollPos += 1.2;
             wrapper.scrollTop = Math.round(tableScrollPos);
             const limit = parseFloat(track.dataset.origHeight || 0);
             if (limit > 0 && tableScrollPos >= limit) {
@@ -412,7 +461,7 @@ function updateTable(records) {
 
 
 // ═════════════════════════════════════════════════════════════════════════
-// 4. CRUCE AVANZADO ENTRE AMBAS BASES DE DATOS (CORREGIDO: ALINEACIÓN HORIZONTAL IMPECABLE)
+// 4. CRUCE AVANZADO ENTRE AMBAS BASES DE DATOS (CORREGIDO CON DETECCIÓN ÚNICA)
 // ═════════════════════════════════════════════════════════════════════════
 function openOperatorsModal(provName, status, origin) {
     const modalWrap = document.getElementById('gala-overlay');
@@ -443,7 +492,13 @@ function openOperatorsModal(provName, status, origin) {
         return matchProv && matchDate && matchOrig;
     });
 
-    const totalLpnProv = operariosAsignados.reduce((acc, r) => acc + toN(r['Suma de Recuento de LPN recibidas'] || r['Cant recib']), 0);
+    // 🌟 CORRECCIÓN CRÍTICA: Total de LPNs reales calculados sin duplicados de subprocesos
+    const uniqueLpnCounterSet = new Set();
+    operariosAsignados.forEach(r => {
+        const lpnId = r['LPN'] || r['Suma de Recuento de LPN recibidas'] || Math.random();
+        uniqueLpnCounterSet.add(lpnId);
+    });
+    const totalLpnProv = uniqueLpnCounterSet.size || 1;
 
     const opMap = {};
 
@@ -453,10 +508,13 @@ function openOperatorsModal(provName, status, origin) {
         let normalizedPhotoKey = opKey.toLowerCase().replace(/\./g, '-');
         let cleanDisplayName = opKey.toUpperCase();
 
-        const lpn = toN(r['Suma de Recuento de LPN recibidas'] || r['Cant recib']);
-        const sku = toN(r['SKU TOTALES'] || 1);
-        const timeStr = String(r['HORA RECEPCION'] || r['Fe y Hr MOD'] || '').trim();
+        // Identificadores para evitar que subtareas sumen infinito el mismo SKU/LPN en el mismo operador
+        const lpnUniqueId = r['LPN'] || Math.random();
+        const skuUniqueId = r['SKU'] || r['SKU TOTALES'] || Math.random();
 
+        const timeStr = String(r['HORA RECEPCION'] || r['Fe y Hr MOD'] || r['HORA'] || '').trim();
+
+        // 🌟 CORRECCIÓN DE HORAS INTERACTIVA E INTELIGENTE
         let timeOnly = '';
         if (timeStr) {
             let matchTime = timeStr.match(/(\d{2}:\d{2}:\d{2})/);
@@ -464,7 +522,7 @@ function openOperatorsModal(provName, status, origin) {
                 timeOnly = matchTime[1];
             } else {
                 let matchShortTime = timeStr.match(/(\d{2}:\d{2})/);
-                timeOnly = matchShortTime ? matchShortTime[1] : timeStr;
+                timeOnly = matchShortTime ? matchShortTime[1] + ":00" : timeStr;
             }
         }
 
@@ -472,16 +530,17 @@ function openOperatorsModal(provName, status, origin) {
             opMap[opKey] = {
                 name: cleanDisplayName,
                 photoKey: normalizedPhotoKey,
-                lpn: 0,
-                sku: 0,
+                lpnSet: new Set(),
+                skuSet: new Set(),
                 firstTime: timeOnly,
                 lastTime: timeOnly,
                 directPhoto: r['usuario_foto'] || r['Usuario_Foto'] || ''
             };
         }
 
-        opMap[opKey].lpn += lpn;
-        opMap[opKey].sku += sku;
+        // Agregar al set único del operario
+        opMap[opKey].lpnSet.add(lpnUniqueId);
+        opMap[opKey].skuSet.add(skuUniqueId);
 
         if (timeOnly) {
             if (!opMap[opKey].firstTime || timeOnly < opMap[opKey].firstTime) opMap[opKey].firstTime = timeOnly;
@@ -496,10 +555,12 @@ function openOperatorsModal(provName, status, origin) {
             No se detectaron transacciones de operarios para esta orden específica en FB2.</div>`;
     } else {
         contentEl.innerHTML = opList.map(op => {
-            const partPct = totalLpnProv > 0 ? ((op.lpn / totalLpnProv) * 100).toFixed(1) : '0.0';
+            // Evaluamos la longitud de los sets para obtener números reales limpios
+            const realLpnCount = op.lpnSet.size;
+            const realSkuCount = op.skuSet.size;
+            const partPct = (((realLpnCount / totalLpnProv) * 100)).toFixed(1);
             const finalPhotoUrl = op.directPhoto ? op.directPhoto : `https://i.postimg.cc/${op.photoKey}.jpg`;
 
-            // REVERSIÓN ESTRUCTURAL COMPLETA: Foto redonda clásica aislada a la izquierda con flexbox nativo
             return `
                 <div class="op-card-premium" style="display: flex !important; flex-direction: row !important; align-items: center !important; padding: 24px !important; position: relative; gap: 25px;">
                     <div class="op-avatar-premium-zone" style="position: relative; flex-shrink: 0; width: 100px; height: 100px;">
@@ -516,11 +577,11 @@ function openOperatorsModal(provName, status, origin) {
                         <div class="op-stats-premium-row">
                             <div class="op-stat-premium-box bg-glow-lpn">
                                 <span class="op-stat-premium-label">LPN RECIBIDOS</span>
-                                <span class="op-stat-premium-value text-neon-green">${fmt(op.lpn)}</span>
+                                <span class="op-stat-premium-value text-neon-green">${fmt(realLpnCount)}</span>
                             </div>
                             <div class="op-stat-premium-box bg-glow-sku">
                                 <span class="op-stat-premium-label">SKUS ÚNICOS</span>
-                                <span class="op-stat-premium-value text-neon-yellow">${fmt(op.sku)}</span>
+                                <span class="op-stat-premium-value text-neon-yellow">${fmt(realSkuCount)}</span>
                             </div>
                         </div>
                         
@@ -536,6 +597,8 @@ function openOperatorsModal(provName, status, origin) {
 
     modalWrap.classList.remove('gala-hidden');
 }
+
+function deleteUnusedOpProperties() { /* Sanitización opcional */ }
 
 function closeOperatorsModal() {
     document.getElementById('gala-overlay').classList.add('gala-hidden');
@@ -587,7 +650,7 @@ dbProductividad.ref().on('value', snap => {
 
 
 // ═════════════════════════════════════════════════════════════════════════
-// 6. ANIMACIONES DE FONDO Y FILTROS RESTANTES
+// 6. ANIMACIONES DE FONDO Y EVENT LISTENERS DE MENÚS INTERACTIVOS
 // ═════════════════════════════════════════════════════════════════════════
 function initBackground() {
     const canvas = document.getElementById('bg');
@@ -634,11 +697,49 @@ function render() {
     updateTable(records);
 }
 
-document.getElementById('dateFilter').addEventListener('change', () => { populateProviders(allRecords); render(); });
-document.getElementById('provFilter').addEventListener('change', (e) => { currentProvFilter = e.target.value; render(); });
+// Interceptores de UI para Desplegables Multiselección
+document.getElementById('statusDropdownBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const menu = document.getElementById('statusDropdownMenu');
+    menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
+    document.getElementById('provDropdownMenu').style.display = 'none';
+});
 
-document.getElementById('statusFilter').addEventListener('change', (e) => {
-    currentStatusFilter = e.target.value;
+document.getElementById('provDropdownBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    const menu = document.getElementById('provDropdownMenu');
+    menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
+    document.getElementById('statusDropdownMenu').style.display = 'none';
+});
+
+document.addEventListener('click', () => {
+    document.getElementById('statusDropdownMenu').style.display = 'none';
+    document.getElementById('provDropdownMenu').style.display = 'none';
+});
+
+document.getElementById('statusDropdownMenu').addEventListener('click', (e) => e.stopPropagation());
+document.getElementById('provDropdownMenu').addEventListener('click', (e) => e.stopPropagation());
+
+document.getElementById('statusDropdownMenu').addEventListener('change', () => {
+    updateStatusFiltersArray();
+    populateProviders(allRecords);
+    render();
+});
+
+document.getElementById('provDropdownMenu').addEventListener('change', (e) => {
+    if (e.target.id === 'selectAllProvs') {
+        const checkboxes = document.querySelectorAll('.prov-check');
+        checkboxes.forEach(cb => cb.checked = e.target.checked);
+    } else if (e.target.classList.contains('prov-check') && !e.target.checked) {
+        const selectAll = document.getElementById('selectAllProvs');
+        if (selectAll) selectAll.checked = false;
+    }
+    updateProvFiltersArray();
+    render();
+});
+
+document.getElementById('dateFilter').addEventListener('change', () => {
+    currentProvFilters = ['ALL'];
     populateProviders(allRecords);
     render();
 });
