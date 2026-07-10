@@ -3,9 +3,10 @@
 
 <head>
   <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>WMS · CEDIS · DASHBOARD</title>
   <link
-    href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;900&family=Orbitron:wght@400;700;900&display=swap"
+    href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600;700;900&family=Orbitron:wght@400;700;900&family=Inter:wght@400;600;800;900&display=swap"
     rel="stylesheet" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   <link rel="stylesheet" href="style.css" />
@@ -29,9 +30,8 @@
 
     <div id="topSection" style="display: flex; height: 50vh; gap: 1vw; margin-bottom: 1vh; align-items: stretch;">
 
-      <div class="glass" id="colGauge"
+      <div class="glass sync-laser" id="colGauge"
         style="flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative; padding: 20px;">
-
         <div id="dateFilterWrap">
           <select id="dateFilter">
             <option value="AUTO">HOY</option>
@@ -40,12 +40,10 @@
             <i class="fas fa-home"></i>
           </button>
         </div>
-
         <canvas id="gaugeCanvas" style="width: 85% !important; height: 85% !important; object-fit: contain;"></canvas>
       </div>
 
       <div id="sideControlPanel" style="flex: 1; display: flex; flex-direction: column; gap: 1vh;">
-
         <div id="miniKpiGrid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1vh; height: 25vh;">
           <div class="glass kpi summary-box"
             style="display: flex; flex-direction: column; justify-content: center; align-items: center;">
@@ -69,7 +67,7 @@
           </div>
         </div>
 
-        <div id="colBats" class="glass"
+        <div id="colBats" class="glass sync-laser"
           style="flex: 1; display: flex; flex-direction: column; justify-content: space-evenly; padding: 1vh 2vw;">
           <div class="vbat" id="btnFilterDP"
             style="display: flex; align-items: center; gap: 1vw; cursor: pointer; transition: transform 0.2s;">
@@ -113,16 +111,28 @@
     </div>
 
     <div id="bottomRow" style="flex: 1; min-height: 0;">
-      <div class="glass" id="colTable" style="height: 100%; display: flex; flex-direction: column;">
-
+      <div class="glass sync-laser" id="colTable" style="height: 100%; display: flex; flex-direction: column;">
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 1vh 1vw 0.5vh 1vw;">
           <div
             style="font-family: 'Orbitron', sans-serif; font-size: 0.9vw; font-weight: bold; color: #00e5ff; letter-spacing: 1px;">
-            MONITOR DE PRODUCTIVIDAD</div>
-          <select id="provFilter"
-            style="background: rgba(0, 0, 0, 0.6); border: 1px solid #00e5ff; color: #fff; font-family: 'Montserrat', sans-serif; font-size: 0.8vw; padding: 5px 15px; border-radius: 4px; cursor: pointer; outline: none; box-shadow: 0 0 10px rgba(0, 229, 255, 0.2); max-width: 20vw;">
-            <option value="ALL">TODOS LOS PROVEEDORES</option>
-          </select>
+            MONITOR DE PRODUCTIVIDAD TRH <span style="font-size: 0.7vw; color: #fff; opacity: 0.5;">(Clic en fila para
+              ver Operadores)</span>
+          </div>
+          <div style="display: flex; gap: 0.5vw; align-items: center;">
+            <select id="statusFilter"
+              style="background: rgba(0, 0, 0, 0.6); border: 1px solid #39FF14; color: #fff; font-family: 'Montserrat', sans-serif; font-size: 0.8vw; padding: 5px 15px; border-radius: 4px; cursor: pointer; outline: none; box-shadow: 0 0 10px rgba(57, 255, 20, 0.2);">
+              <option value="ALL">TODOS LOS ESTADOS</option>
+              <option value="RECEPCIÓN INICIADA">RECEPCIÓN INICIADA</option>
+              <option value="RECEPCIÓN COMPLETA">RECEPCIÓN COMPLETA</option>
+              <option value="EN TRÁNSITO">EN TRÁNSITO</option>
+              <option value="VERIFICADO">VERIFICADO</option>
+            </select>
+
+            <select id="provFilter"
+              style="background: rgba(0, 0, 0, 0.6); border: 1px solid #00e5ff; color: #fff; font-family: 'Montserrat', sans-serif; font-size: 0.8vw; padding: 5px 15px; border-radius: 4px; cursor: pointer; outline: none; box-shadow: 0 0 10px rgba(0, 229, 255, 0.2); max-width: 20vw;">
+              <option value="ALL">TODOS LOS PROVEEDORES</option>
+            </select>
+          </div>
         </div>
 
         <div id="tHeadWrap" class="wavy-header">
@@ -146,8 +156,23 @@
 
   </div>
 
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
+  <div id="gala-overlay" class="gala-hidden">
+    <div id="gala-background"></div>
+    <div class="gala-modal glass sync-laser">
+      <div class="gala-header">
+        <div class="gala-header-title">
+          <i class="fas fa-users-cog neon-txt-glow"></i> CONTROL DE EQUIPO EN TIEMPO REAL
+        </div>
+        <div class="gala-subtitle" id="gala-target-prov">PROVEEDOR SELECCIONADO</div>
+        <button class="gala-close-btn" id="gala-close">&times;</button>
+      </div>
+      <div class="gala-body" id="gala-content">
+      </div>
+    </div>
+  </div>
+
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
   <script src="dashboard_logic.js"></script>
 </body>
 
