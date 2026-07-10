@@ -1,4 +1,3 @@
-/* ══ FIREBASE ══ */
 const firebaseConfig = {
     apiKey: 'AIzaSyDLBnGH_k_7ss6sk4aVAX_EBPOcvWiVZMM',
     authDomain: 'wms-dashboard-12982.firebaseapp.com',
@@ -12,23 +11,22 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 
-/* ══ HELPERS ══ */
 const toN = v => { const n = Number(String(v ?? '').replace(/,/g, '').trim()); return isNaN(n) ? 0 : n; };
 const fmt = n => Number(n).toLocaleString('es-AR');
 const todayStr = () => { const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; };
+
+// Traducción y homologación estricta de estados
 const statusOf = s => {
     const l = String(s || '').toLowerCase();
-    if (l.includes('verif')) return 'VERIFICADO';
+    if (l.includes('verif') || l.includes('verified')) return 'VERIFICADO';
     if (l.includes('transit') || l.includes('trán')) return 'EN TRÁNSITO';
     if (l.includes('complet')) return 'RECEPCIÓN COMPLETA';
-    if (l.includes('inici') || l.includes('start')) return 'RECEPCIÓN INICIADA';
+    if (l.includes('inici') || l.includes('start') || l.includes('receiv')) return 'RECEPCIÓN INICIADA';
     return 'PENDIENTE';
 };
 
-/* ══ STATE ══ */
-let allRecords = [], gaugeTarget = 0, gaugeCur = 0, gaugeRaf = null;
+let allRecords = [], currentOriginFilter = 'ALL', currentProvFilter = 'ALL', gaugeTarget = 0, gaugeCur = 0, gaugeRaf = null;
 
-/* ══ DATE FILTER ══ */
 function populateDates(records) {
     const sel = document.getElementById('dateFilter');
     const prev = sel.value;
@@ -39,13 +37,58 @@ function populateDates(records) {
     const t = todayStr();
     sel.value = dates.includes(t) ? t : (dates.length ? dates[dates.length - 1] : 'AUTO');
 }
-function getFiltered() {
-    const v = document.getElementById('dateFilter').value;
-    if (v === 'AUTO') { const t = todayStr(); const f = allRecords.filter(r => r['Fecha Personal 1'] === t); return f.length ? f : allRecords; }
-    return allRecords.filter(r => r['Fecha Personal 1'] === v);
+
+function populateProviders(records) {
+    const sel = document.getElementById('provFilter');
+    const prev = sel.value;
+    const dateVal = document.getElementById('dateFilter').value;
+
+    let activeRecords = records;
+    if (dateVal === 'AUTO') {
+        const t = todayStr();
+        const f = records.filter(r => r['Fecha Personal 1'] === t);
+        activeRecords = f.length ? f : records;
+    } else {
+        activeRecords = records.filter(r => r['Fecha Personal 1'] === dateVal);
+    }
+
+    if (currentOriginFilter !== 'ALL') {
+        activeRecords = activeRecords.filter(r => {
+            const o = String(r['Informacion de Origen'] || '').toUpperCase();
+            return o.includes(currentOriginFilter);
+        });
+    }
+
+    const provs = [...new Set(activeRecords.map(r => r['NOMBRE DE PROVEEDOR']).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="ALL">TODOS LOS PROVEEDORES</option>';
+    provs.forEach(p => { const o = document.createElement('option'); o.value = o.textContent = p; sel.appendChild(o); });
+
+    if (prev !== 'ALL' && provs.includes(prev)) { sel.value = prev; currentProvFilter = prev; }
+    else { sel.value = 'ALL'; currentProvFilter = 'ALL'; }
 }
 
-/* ══ KPIs ══ */
+function getFiltered() {
+    const v = document.getElementById('dateFilter').value;
+    let records = allRecords;
+    if (v === 'AUTO') {
+        const t = todayStr();
+        const f = allRecords.filter(r => r['Fecha Personal 1'] === t);
+        records = f.length ? f : allRecords;
+    } else {
+        records = allRecords.filter(r => r['Fecha Personal 1'] === v);
+    }
+    if (currentOriginFilter !== 'ALL') {
+        records = records.filter(r => {
+            const o = String(r['Informacion de Origen'] || '').toUpperCase();
+            return o.includes(currentOriginFilter);
+        });
+    }
+    if (currentProvFilter !== 'ALL') {
+        records = records.filter(r => r['NOMBRE DE PROVEEDOR'] === currentProvFilter);
+    }
+    return records;
+}
+
 function calcKPIs(records) {
     const env = records.reduce((a, r) => a + toN(r['Suma de Recuento de LPN enviadas']), 0);
     const rec = records.reduce((a, r) => a + toN(r['Suma de Recuento de LPN recibidas']), 0);
@@ -54,6 +97,7 @@ function calcKPIs(records) {
     const pct = env > 0 ? (rec / env) * 100 : 0;
     return { env, rec, sku, prov, pct };
 }
+
 function renderKPIs({ env, rec, sku, prov }) {
     document.getElementById('kEnv').textContent = fmt(env);
     document.getElementById('kRec').textContent = fmt(rec);
@@ -61,104 +105,72 @@ function renderKPIs({ env, rec, sku, prov }) {
     document.getElementById('kProv').textContent = prov;
 }
 
-/* ══ 360° GAUGE (Multi-Color by 12.5% Steps) ══ */
 const SEGS = 72, GAP = 0.035;
 
 function getGaugeColor(pctVal) {
-    // 0% a 12.5%: Rojo Crítico
     if (pctVal <= 12.5) return ['#FF0000', 'rgba(255,0,0,.7)'];
-
-    // 12.6% a 25%: Naranja Rojizo
     if (pctVal <= 25) return ['#FF4500', 'rgba(255,69,0,.7)'];
-
-    // 25.1% a 37.5%: Naranja Intenso
     if (pctVal <= 37.5) return ['#FF8C00', 'rgba(255,140,0,.7)'];
-
-    // 37.6% a 50%: Dorado / Ámbar
     if (pctVal <= 50) return ['#FFD700', 'rgba(255,215,0,.7)'];
-
-    // 50.1% a 62.5%: Verde Lima (Tu color base actual)
     if (pctVal <= 62.5) return ['#ADFF2F', 'rgba(173,255,47,.7)'];
-
-    // 62.6% a 75%: Chartreuse (Verde más intenso)
     if (pctVal <= 75) return ['#7FFF00', 'rgba(127,255,0,.7)'];
-
-    // 75.1% a 87.5%: Verde Eléctrico
     if (pctVal <= 87.5) return ['#00FF00', 'rgba(0,255,0,.7)'];
-
-    // 87.6% a 100%: Cian Neón (Meta alcanzada)
     return ['#00FFFF', 'rgba(0,255,255,.8)'];
 }
 
 function drawGauge(canvas, pct, time = 0) {
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     const W = canvas.width, H = canvas.height;
     const cx = W / 2, cy = H / 2;
-
-    // 1. PADDING CASI CERO: Para que toque físicamente el borde del cuadro negro
-    const padding = 0;
-    const Ro = (Math.min(W, H) / 2) - padding;
-
-    // 2. GROSOR DEL ANILLO: 
-    // Si quieres que el círculo sea más "gordo" y llene más espacio hacia adentro:
-    // Usa 0.50 o 0.55 en lugar de 0.60.
+    const Ro = (Math.min(W, H) / 2);
     const Ri = Ro * 0.55;
 
     ctx.clearRect(0, 0, W, H);
-
     const step = (Math.PI * 2) / SEGS;
     const segArc = step - GAP;
     const filledCnt = Math.max(0, Math.round((pct / 100) * SEGS));
-    const START = Math.PI / 2; // arranca desde abajo
+    const START = Math.PI / 2;
 
     for (let i = 0; i < SEGS; i++) {
         const a0 = START + step * i;
         const a1 = a0 + segArc;
-
         ctx.beginPath();
         ctx.arc(cx, cy, Ro, a0, a1);
         ctx.arc(cx, cy, Ri, a1, a0, true);
         ctx.closePath();
 
         if (i < filledCnt) {
-            // El color depende del porcentaje que representa este segmento (0-100%)
             const segPct = (i / SEGS) * 100;
             const [fill, glow] = getGaugeColor(segPct);
-
-            // Glow oscillation based on time
             const baseGlow = 10;
-            const extraGlow = (Math.sin(time / 400) + 1) * 8; // Da una sensación de latido
-
+            const extraGlow = (Math.sin(time / 400) + 1) * 8;
             ctx.fillStyle = fill;
             ctx.shadowColor = glow; ctx.shadowBlur = baseGlow + extraGlow;
         } else {
-            ctx.fillStyle = 'rgba(255,255,255,0.06)'; ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(255,255,255,0.06)';
+            ctx.shadowBlur = 0;
         }
         ctx.fill();
     }
     ctx.shadowBlur = 0;
 
-    /* Inner Ring */
     ctx.beginPath(); ctx.arc(cx, cy, Ri * 0.93, 0, Math.PI * 2);
     ctx.strokeStyle = pct > 0 ? getGaugeColor(pct)[0] : '#00ff66';
     ctx.lineWidth = 1; ctx.globalAlpha = 0.3; ctx.stroke();
     ctx.globalAlpha = 1;
 
-    /* Liquid Wave in Center */
     if (pct > 0) {
         ctx.save();
         ctx.beginPath();
         ctx.arc(cx, cy, Ri * 0.93, 0, Math.PI * 2);
-        ctx.clip(); // Liquid inside the circle only
-
+        ctx.clip();
         const [fillCol] = getGaugeColor(pct);
         ctx.fillStyle = fillCol;
         ctx.globalAlpha = 0.3;
-
-        const liquidY = cy + (Ri * 0.4); // Fixed at the base
+        const liquidY = cy + (Ri * 0.4) - ((Ri * 0.8) * (pct / 100));
         const waveFreq = 0.04;
-        const waveAmp = Ri * 0.08; // Ola oscilatoria
-
+        const waveAmp = Ri * 0.08;
         ctx.beginPath();
         ctx.moveTo(cx - Ri, cy + Ri);
         for (let x = cx - Ri; x <= cx + Ri; x += 5) {
@@ -169,13 +181,11 @@ function drawGauge(canvas, pct, time = 0) {
         ctx.restore();
     }
 
-    /* Huge Percentage Text */
     const [textCol] = pct > 0 ? getGaugeColor(pct) : ['#00ff66'];
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillStyle = textCol;
-    ctx.shadowColor = textCol; ctx.shadowBlur = 15; // Brillo exterior sutil
-
-    const fontSize = Math.floor(Ro * 0.28); // Más pequeño para que respire
+    ctx.shadowColor = textCol; ctx.shadowBlur = 15;
+    const fontSize = Math.floor(Ro * 0.28);
     ctx.font = `900 ${fontSize}px 'Inter', sans-serif`;
     ctx.fillText(pct.toFixed(1) + '%', cx, cy - Ro * 0.08);
 
@@ -202,28 +212,28 @@ function animateGaugeTo(target) {
     }
 }
 
-// Busca la función que redimensiona el canvas
 function sizeGauge() {
     const canvas = document.getElementById('gaugeCanvas');
-    const wrap = document.getElementById('colGauge'); // El ID del contenedor negro
-
-    // USAR Math.min ASEGURA QUE SIEMPRE SEA UN CÍRCULO PERFECTO
-    // Multiplicamos por 0.90 para que sea grande pero tenga "aire" a los lados y arriba
+    const wrap = document.getElementById('colGauge');
+    if (!wrap || !canvas) return;
     const size = Math.min(wrap.clientWidth, wrap.clientHeight) * 1.20;
-
-    // Si el círculo no crece, es porque 'wrap.clientHeight' es muy pequeño (visto en Paso 2)
-    if (size > 0) {
-        canvas.width = size;
-        canvas.height = size;
-    }
-
-    // Redibujamos con el nuevo tamaño controlado
+    if (size > 0) { canvas.width = size; canvas.height = size; }
     drawGauge(canvas, gaugeCur, performance.now());
 }
-/* ══ BATTERIES ══ */
+
 function updateBatteries(records) {
     const dp = { env: 0, rec: 0 }, cds = { env: 0, rec: 0 };
-    records.forEach(r => {
+    let baseRecords = allRecords;
+    const dateVal = document.getElementById('dateFilter').value;
+    if (dateVal === 'AUTO') {
+        const t = todayStr();
+        const f = allRecords.filter(r => r['Fecha Personal 1'] === t);
+        baseRecords = f.length ? f : allRecords;
+    } else {
+        baseRecords = allRecords.filter(r => r['Fecha Personal 1'] === dateVal);
+    }
+
+    baseRecords.forEach(r => {
         const o = String(r['Informacion de Origen'] || '').toUpperCase();
         const e = toN(r['Suma de Recuento de LPN enviadas']);
         const c = toN(r['Suma de Recuento de LPN recibidas']);
@@ -234,18 +244,18 @@ function updateBatteries(records) {
     const set = (fillId, numId, pctId, d, colorClass) => {
         const p = d.env > 0 ? (d.rec / d.env) * 100 : 0;
         const fillEl = document.getElementById(fillId);
-        fillEl.style.width = Math.min(p, 100) + '%';
-        // Forzamos el color según origen
-        fillEl.className = 'vbat-fill ' + colorClass;
-
+        if (fillEl) {
+            fillEl.style.width = Math.min(p, 100) + '%';
+            fillEl.className = 'vbat-fill ' + colorClass;
+        }
         document.getElementById(numId).textContent = `${fmt(d.rec)} / ${fmt(d.env)}`;
         document.getElementById(pctId).textContent = p.toFixed(1) + '%';
     };
 
-    // Aquí asignamos: DP = bg-cyan | CDS = bg-neon
     set('dpFill', 'dpNum', 'dpPct', dp, 'bg-cyan');
     set('cdsFill', 'cdsNum', 'cdsPct', cds, 'bg-neon');
 }
+
 function initBubbles() {
     ['dpBubs', 'cdsBubs'].forEach(id => {
         const container = document.getElementById(id);
@@ -261,34 +271,45 @@ function initBubbles() {
     });
 }
 
-
-/* ══ TABLE ══ */
+// NUEVA FUNCIÓN DE AGREGACIÓN DESGLOSADA POR PROVEEDOR + ESTADO + ORIGEN
 function aggregate(records) {
     const map = {};
     records.forEach(r => {
-        const k = r['NOMBRE DE PROVEEDOR'] || 'N/D';
-        if (!map[k]) map[k] = { env: 0, rec: 0, sku: 0, estado: '', origen: '' };
+        const name = r['NOMBRE DE PROVEEDOR'] || 'N/D';
+        const transStatus = statusOf(r['ESTADO']);
+
+        // Identificar origen limpio (DP o CDS)
+        const rawOrig = String(r['Informacion de Origen'] || 'N/D').toUpperCase();
+        const orig = rawOrig.includes('DP') ? 'DP' : (rawOrig.includes('CDS') ? 'CDS' : rawOrig);
+
+        // La clave ahora une el nombre, el estado traducido y el origen exacto
+        const k = `${name}|||${transStatus}|||${orig}`;
+
+        if (!map[k]) {
+            map[k] = { name, env: 0, rec: 0, sku: 0, estado: transStatus, origen: orig };
+        }
         map[k].env += toN(r['Suma de Recuento de LPN enviadas']);
         map[k].rec += toN(r['Suma de Recuento de LPN recibidas']);
         map[k].sku += toN(r['SKU TOTALES']);
-        if (!map[k].estado && r['ESTADO']) map[k].estado = r['ESTADO'];
-        if (!map[k].origen && r['Informacion de Origen']) map[k].origen = r['Informacion de Origen'];
     });
 
-    // Filtrar filas de proveedores que están a 100% (solo incompletos/pendientes)
-    const filteredEntries = Object.entries(map).filter(([k, v]) => {
-        const pct = v.env > 0 ? (v.rec / v.env) * 100 : 0;
-        return pct < 100;
+    const filteredItems = Object.values(map).filter(item => {
+        // Si hay filtro por proveedor seleccionado, se exponen todas sus divisiones logísticas
+        if (currentProvFilter !== 'ALL') return true;
+
+        // En vista general, ocultamos las divisiones que ya terminaron o están verificadas
+        const pct = item.env > 0 ? (item.rec / item.env) * 100 : 0;
+        return pct < 100 && item.estado !== 'VERIFICADO';
     });
 
-    return filteredEntries.sort((a, b) => b[1].env - a[1].env);
+    return filteredItems.sort((a, b) => b.env - a.env);
 }
 
-function buildRows(entries) {
-    return entries.map(([name, v]) => {
-        const pct = v.env > 0 ? (v.rec / v.env) * 100 : 0;
+function buildRows(items) {
+    return items.map(item => {
+        const pct = item.env > 0 ? (item.rec / item.env) * 100 : 0;
         const w = Math.min(pct, 100).toFixed(1);
-        const stLbl = statusOf(v.estado);
+        const stLbl = item.estado;
 
         let pillClass = 'pill-pen';
         if (stLbl === 'VERIFICADO') pillClass = 'pill-ver';
@@ -296,16 +317,15 @@ function buildRows(entries) {
         else if (stLbl === 'RECEPCIÓN COMPLETA') pillClass = 'pill-com';
         else if (stLbl === 'RECEPCIÓN INICIADA') pillClass = 'pill-ini';
 
-        let origColor = (v.origen || '').toUpperCase().includes('DP') ? '#00e5ff' : '#ffff00';
+        let origColor = item.origen.includes('DP') ? '#00e5ff' : '#ffff00';
 
-        // Columnas Exactas: PROVEEDOR | ESTADO | ORIGEN | SKU | LPN INGRESADO (rec) | LPN TOTAL (env) | % AVANCE
         return `<div class="trow">
-    <span class="c-prov" style="flex: 2;" title="${name}">${name}</span>
+    <span class="c-prov" style="flex: 2;" title="${item.name}">${item.name}</span>
     <span class="c-est" style="flex: 1.5;"><span class="pill ${pillClass}">${stLbl}</span></span>
-    <span class="c-orig" style="flex: 0.8; color: ${origColor}; font-weight: 700;">${v.origen || 'N/D'}</span>
-    <span class="c-sku" style="flex: 0.6;">${fmt(v.sku)}</span>
-    <span class="c-rec" style="flex: 0.8;">${fmt(v.rec)}</span>
-    <span class="c-env" style="flex: 0.8;">${fmt(v.env)}</span>
+    <span class="c-orig" style="flex: 0.8; color: ${origColor}; font-weight: 700;">${item.origen}</span>
+    <span class="c-sku" style="flex: 0.6;">${fmt(item.sku)}</span>
+    <span class="c-rec" style="flex: 0.8;">${fmt(item.rec)}</span>
+    <span class="c-env" style="flex: 0.8;">${fmt(item.env)}</span>
     <div class="t-bar-wrap" style="flex: 1.5;">
         <span class="t-bar-pct" style="color: #39FF14;">${w}%</span>
         <div class="t-bar-bg">
@@ -322,7 +342,6 @@ let tableScrollPos = 0;
 function updateTable(records) {
     const track = document.getElementById('table-body');
     const wrapper = document.querySelector('.table-scroll-wrapper');
-
     if (!track || !wrapper) return;
 
     const ents = aggregate(records);
@@ -331,16 +350,22 @@ function updateTable(records) {
     const html = buildRows(ents);
     track.innerHTML = html;
 
+    // Solo corre animación si el visor general contiene más de un registro activo
+    if (currentProvFilter !== 'ALL' || ents.length <= 1) {
+        if (tableScrollRaf) cancelAnimationFrame(tableScrollRaf);
+        wrapper.scrollTop = 0;
+        wrapper.onmouseenter = null;
+        wrapper.onmouseleave = null;
+        return;
+    }
+
     requestAnimationFrame(() => {
         let originalHeight = track.offsetHeight;
         if (originalHeight > 0) {
             let requiredCopies = Math.ceil((wrapper.offsetHeight * 2) / originalHeight);
             if (requiredCopies < 2) requiredCopies = 2;
-
             let extraHtml = '';
-            for (let i = 1; i < requiredCopies; i++) {
-                extraHtml += html;
-            }
+            for (let i = 1; i < requiredCopies; i++) { extraHtml += html; }
             track.innerHTML += extraHtml;
             track.dataset.origHeight = originalHeight;
         }
@@ -350,7 +375,6 @@ function updateTable(records) {
         function animateScroll() {
             tableScrollPos += 1.5;
             wrapper.scrollTop = Math.round(tableScrollPos);
-
             const limit = parseFloat(track.dataset.origHeight || 0);
             if (limit > 0 && tableScrollPos >= limit) {
                 tableScrollPos -= limit;
@@ -359,24 +383,15 @@ function updateTable(records) {
             tableScrollRaf = requestAnimationFrame(animateScroll);
         }
 
-        // 1. ARRANCAMOS EL SCROLL
         tableScrollRaf = requestAnimationFrame(animateScroll);
-
-        // 2. CONFIGURAMOS LA PAUSA (Ponerlo aquí al final)
-        wrapper.onmouseenter = () => {
-            if (tableScrollRaf) cancelAnimationFrame(tableScrollRaf);
-        };
-
-        wrapper.onmouseleave = () => {
-            // IMPORTANTE: Volvemos a llamar a la función que acabamos de definir arriba
-            tableScrollRaf = requestAnimationFrame(animateScroll);
-        };
+        wrapper.onmouseenter = () => { if (tableScrollRaf) cancelAnimationFrame(tableScrollRaf); };
+        wrapper.onmouseleave = () => { tableScrollRaf = requestAnimationFrame(animateScroll); };
     });
 }
 
-/* ══ WALL STREET WAVES (5 LEVELS, BACKGROUND) ══ */
 function initBackground() {
     const canvas = document.getElementById('bg');
+    if (!canvas) return;
     const ctx = canvas.getContext('2d');
     let W, H;
     const resize = () => { W = canvas.width = window.innerWidth; H = canvas.height = window.innerHeight; };
@@ -385,23 +400,18 @@ function initBackground() {
 
     let t = 0;
     const draw = () => {
-        t += 0.0096; // Velocidad de olas incrementada en 30%
+        t += 0.0096;
         ctx.clearRect(0, 0, W, H);
 
         const waves = [
-            // Parte Superior (KPIs)
             { col: '#00e5ff', amp: H * .05, freq: .004, ph: t * 0.8, y: H * .08 },
             { col: '#00ff88', amp: H * .06, freq: .005, ph: t * 1.2, y: H * .14 },
             { col: '#e040fb', amp: H * .07, freq: .003, ph: t * 1.5, y: H * .20 },
-
-            // Parte Media (Detrás de las barras/reloj)
             { col: '#00e5ff', amp: H * .09, freq: .003, ph: t, y: H * .28 },
             { col: '#e040fb', amp: H * .12, freq: .005, ph: t * 1.5, y: H * .36 },
             { col: '#00ff88', amp: H * .07, freq: .008, ph: t * 2.2, y: H * .44 },
             { col: '#00e5ff', amp: H * .08, freq: .004, ph: t * 1.1, y: H * .52 },
             { col: '#ffff00', amp: H * .10, freq: .006, ph: t * 0.9, y: H * .60 },
-
-            // NUEVAS: Parte Inferior (Detrás de la tabla de proveedores)
             { col: '#00ff88', amp: H * .08, freq: .005, ph: t * 1.3, y: H * .70 },
             { col: '#00e5ff', amp: H * .11, freq: .003, ph: t * 0.7, y: H * .80 },
             { col: '#e040fb', amp: H * .09, freq: .006, ph: t * 1.8, y: H * .90 },
@@ -422,7 +432,6 @@ function initBackground() {
             ctx.shadowBlur = 0; ctx.globalAlpha = 1;
         });
 
-        // Partículas suaves
         for (let i = 0; i < 30; i++) {
             const px = (Math.sin(i * 7.1 + t * 0.4) * 0.5 + 0.5) * W;
             const py = (Math.cos(i * 3.3 + t * 0.6) * 0.5 + 0.5) * H;
@@ -437,7 +446,6 @@ function initBackground() {
     requestAnimationFrame(draw);
 }
 
-/* ══ MASTER RENDER ══ */
 function render() {
     const records = getFiltered();
     const kpis = calcKPIs(records);
@@ -447,21 +455,59 @@ function render() {
     updateTable(records);
 }
 
-/* ══ FIREBASE ══ */
 db.ref('datos_dashboard').on('value', snap => {
     const raw = snap.val();
     allRecords = raw ? (Array.isArray(raw) ? raw : Object.values(raw)).filter(Boolean) : [];
     populateDates(allRecords);
+    populateProviders(allRecords);
     render();
     const ov = document.getElementById('loading');
-    if (!ov.classList.contains('gone')) setTimeout(() => ov.classList.add('gone'), 500);
+    if (ov && !ov.classList.contains('gone')) setTimeout(() => ov.classList.add('gone'), 500);
 }, err => {
     console.error(err);
 });
 
-document.getElementById('dateFilter').addEventListener('change', render);
+document.getElementById('dateFilter').addEventListener('change', () => {
+    populateProviders(allRecords);
+    render();
+});
 
-// REDIRECCIÓN HOME (PORTAL MAESTRO)
+document.getElementById('provFilter').addEventListener('change', (e) => {
+    currentProvFilter = e.target.value;
+    render();
+});
+
+function toggleFilter(type) {
+    const btnDP = document.getElementById('btnFilterDP');
+    const btnCDS = document.getElementById('btnFilterCDS');
+
+    if (currentOriginFilter === type) {
+        currentOriginFilter = 'ALL';
+        btnDP.style.opacity = '1';
+        btnDP.style.transform = 'scale(1)';
+        btnCDS.style.opacity = '1';
+        btnCDS.style.transform = 'scale(1)';
+    } else {
+        currentOriginFilter = type;
+        if (type === 'DP') {
+            btnDP.style.opacity = '1';
+            btnDP.style.transform = 'scale(1.03)';
+            btnCDS.style.opacity = '0.4';
+            btnCDS.style.transform = 'scale(0.97)';
+        } else {
+            btnCDS.style.opacity = '1';
+            btnCDS.style.transform = 'scale(1.03)';
+            btnDP.style.opacity = '0.4';
+            btnDP.style.transform = 'scale(0.97)';
+        }
+    }
+    populateProviders(allRecords);
+    render();
+}
+
+document.getElementById('btnFilterDP').addEventListener('click', () => toggleFilter('DP'));
+document.getElementById('btnFilterCDS').addEventListener('click', () => toggleFilter('CDS'));
+
 const btnHome = document.getElementById('btnHome');
 if (btnHome) {
     btnHome.onclick = () => {
@@ -471,7 +517,6 @@ if (btnHome) {
 
 window.addEventListener('resize', sizeGauge);
 
-/* ══ ON LOAD ══ */
 initBackground();
 initBubbles();
 requestAnimationFrame(() => requestAnimationFrame(sizeGauge));
