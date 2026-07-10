@@ -118,20 +118,45 @@
             MONITOR DE PRODUCTIVIDAD TRH <span style="font-size: 0.7vw; color: #fff; opacity: 0.5;">(Clic en fila para
               ver Operadores)</span>
           </div>
-          <div style="display: flex; gap: 0.5vw; align-items: center;">
-            <select id="statusFilter"
-              style="background: rgba(0, 0, 0, 0.6); border: 1px solid #39FF14; color: #fff; font-family: 'Montserrat', sans-serif; font-size: 0.8vw; padding: 5px 15px; border-radius: 4px; cursor: pointer; outline: none; box-shadow: 0 0 10px rgba(57, 255, 20, 0.2);">
-              <option value="ALL">TODOS LOS ESTADOS</option>
-              <option value="RECEPCIÓN INICIADA">RECEPCIÓN INICIADA</option>
-              <option value="RECEPCIÓN COMPLETA">RECEPCIÓN COMPLETA</option>
-              <option value="EN TRÁNSITO">EN TRÁNSITO</option>
-              <option value="VERIFICADO">VERIFICADO</option>
-            </select>
 
-            <select id="provFilter"
-              style="background: rgba(0, 0, 0, 0.6); border: 1px solid #00e5ff; color: #fff; font-family: 'Montserrat', sans-serif; font-size: 0.8vw; padding: 5px 15px; border-radius: 4px; cursor: pointer; outline: none; box-shadow: 0 0 10px rgba(0, 229, 255, 0.2); max-width: 20vw;">
-              <option value="ALL">TODOS LOS PROVEEDORES</option>
-            </select>
+          <div style="display: flex; gap: 0.8vw; align-items: center; position: relative; z-index: 999;">
+
+            <div class="custom-dropdown" id="statusDropdown"
+              style="position: relative; font-family: 'Montserrat', sans-serif; font-size: 0.8vw;">
+              <div class="dropdown-checked-btn" id="statusDropdownBtn"
+                style="background: rgba(0, 0, 0, 0.7); border: 1px solid #39FF14; color: #fff; padding: 5px 15px; border-radius: 4px; cursor: pointer; min-width: 12vw; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 0 10px rgba(57, 255, 20, 0.2);">
+                <span class="btn-text">TODOS LOS ESTADOS</span>
+                <i class="fas fa-chevron-down" style="font-size: 0.6vw; color: #39FF14;"></i>
+              </div>
+              <div class="dropdown-menu-content" id="statusDropdownMenu"
+                style="display: none; position: absolute; top: 110%; left: 0; background: rgba(2, 11, 20, 0.95); border: 1px solid #39FF14; border-radius: 4px; width: 100%; box-sizing: border-box; padding: 8px; gap: 6px; flex-direction: column; box-shadow: 0 5px 20px rgba(0,0,0,0.8); backdrop-filter: blur(10px);">
+                <label
+                  style="display: flex; align-items: center; gap: 8px; color: #fff; cursor: pointer; padding: 4px 0;"><input
+                    type="checkbox" value="RECEPCIÓN INICIADA" checked> RECEPCIÓN INICIADA</label>
+                <label
+                  style="display: flex; align-items: center; gap: 8px; color: #fff; cursor: pointer; padding: 4px 0;"><input
+                    type="checkbox" value="RECEPCIÓN COMPLETA" checked> RECEPCIÓN COMPLETA</label>
+                <label
+                  style="display: flex; align-items: center; gap: 8px; color: #fff; cursor: pointer; padding: 4px 0;"><input
+                    type="checkbox" value="EN TRÁNSITO" checked> EN TRÁNSITO</label>
+                <label
+                  style="display: flex; align-items: center; gap: 8px; color: #fff; cursor: pointer; padding: 4px 0;"><input
+                    type="checkbox" value="VERIFICADO" checked> VERIFICADO</label>
+              </div>
+            </div>
+
+            <div class="custom-dropdown" id="provDropdown"
+              style="position: relative; font-family: 'Montserrat', sans-serif; font-size: 0.8vw;">
+              <div class="dropdown-checked-btn" id="provDropdownBtn"
+                style="background: rgba(0, 0, 0, 0.7); border: 1px solid #00e5ff; color: #fff; padding: 5px 15px; border-radius: 4px; cursor: pointer; min-width: 15vw; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 0 10px rgba(0, 229, 255, 0.2);">
+                <span class="btn-text">TODOS LOS PROVEEDORES</span>
+                <i class="fas fa-chevron-down" style="font-size: 0.6vw; color: #00e5ff;"></i>
+              </div>
+              <div class="dropdown-menu-content" id="provDropdownMenu"
+                style="display: none; position: absolute; top: 110%; left: 0; background: rgba(2, 11, 20, 0.95); border: 1px solid #00e5ff; border-radius: 4px; width: 100%; max-height: 250px; overflow-y: auto; box-sizing: border-box; padding: 8px; gap: 6px; flex-direction: column; box-shadow: 0 5px 20px rgba(0,0,0,0.8); backdrop-filter: blur(10px);">
+              </div>
+            </div>
+
           </div>
         </div>
 
