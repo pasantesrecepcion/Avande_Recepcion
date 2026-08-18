@@ -1,5 +1,5 @@
 // ═════════════════════════════════════════════════════════════════════════
-// 1. INICIALIZACIÓN DE AMBAS BASES DE DATOS (FIREBASE DOBLE)
+// 1. INICIALIZACIÓN DE BASES DE DATOS (FIREBASE & SUPABASE)
 // ═════════════════════════════════════════════════════════════════════════
 
 const configAvance = {
@@ -21,21 +21,39 @@ const configProductividad = {
 const appProductividad = firebase.initializeApp(configProductividad, "appProductividad");
 const dbProductividad = appProductividad.database();
 
+const SUPABASE_URL = "https://kdclsbscslklcypclohj.supabase.co".trim();
+const SUPABASE_ANON_KEY = "sb_publishable_-jYliISAOxmckNHeoXMkpQ_7DIP0vp0".trim();
+const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
 
 // ═════════════════════════════════════════════════════════════════════════
-// 2. ESTADO GLOBAL Y UTILERÍAS
+// 2. ESTADO GLOBAL Y UTILIDADES
 // ═════════════════════════════════════════════════════════════════════════
 let allRecords = [];
 let pndRecords = [];
+let baseDatosIncidencias = [];
+let baseDatosAgenda = [];
+let ultimaActualizacionExitosa = null;
 
 let currentOriginFilter = 'ALL';
-let currentProvFilters = [];   // Cambiado a Array para soporte multiselección
-let currentStatusFilters = ['RECEPCIÓN INICIADA', 'RECEPCIÓN COMPLETA', 'EN TRÁNSITO', 'VERIFICADO']; // Todos activos por defecto
+let currentProvFilters = [];
+let currentStatusFilters = ['RECEPCIÓN INICIADA', 'RECEPCIÓN COMPLETA', 'EN TRÁNSITO', 'VERIFICADO'];
 let gaugeTarget = 0, gaugeCur = 0;
+
+const CAPACIDAD_FIJA_DIARIA = 77.0;
 
 const toN = v => { const n = Number(String(v ?? '').replace(/,/g, '').trim()); return isNaN(n) ? 0 : n; };
 const fmt = n => Number(n).toLocaleString('es-AR');
-const todayStr = () => { const d = new Date(); return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`; };
+
+const todayStr = () => {
+    const d = new Date();
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+};
+
+const todayISOStr = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 const statusOf = s => {
     const l = String(s || '').toLowerCase();
@@ -46,11 +64,30 @@ const statusOf = s => {
     return 'PENDIENTE';
 };
 
+
 // ═════════════════════════════════════════════════════════════════════════
-// 3. LOGICA DE FILTROS Y RENDERS (MÓDULO AVANCE - FB1)
+// 3. LÓGICA DE FILTROS Y RENDERS
 // ═════════════════════════════════════════════════════════════════════════
+function filterByOrigin(type) {
+    if (currentOriginFilter === type) {
+        currentOriginFilter = 'ALL';
+    } else {
+        currentOriginFilter = type;
+    }
+
+    const cardFarmacia = document.getElementById('btnFilterCDS');
+    const cardSala = document.getElementById('btnFilterDP');
+
+    if (cardFarmacia) cardFarmacia.style.outline = currentOriginFilter === 'CDS' ? '2px solid #00f3ff' : 'none';
+    if (cardSala) cardSala.style.outline = currentOriginFilter === 'DP' ? '2px solid #00f3ff' : 'none';
+
+    populateProviders(allRecords);
+    render();
+}
+
 function populateDates(records) {
     const sel = document.getElementById('dateFilter');
+    if (!sel) return;
     const prev = sel.value;
     const dates = [...new Set(records.map(r => r['Fecha Personal 1']).filter(Boolean))].sort();
     sel.innerHTML = '<option value="AUTO">HOY</option>';
@@ -82,14 +119,11 @@ function populateProviders(records) {
         });
     }
 
-    // Filtrar la lista de proveedores basándose en los estados tildados actualmente
     activeRecords = activeRecords.filter(r => currentStatusFilters.includes(statusOf(r['ESTADO'] || r['Estado LPN'])));
-
     const provs = [...new Set(activeRecords.map(r => r['NOMBRE DE PROVEEDOR']).filter(Boolean))].sort();
 
-    // Inyectar checkboxes dinámicos con estética Neon Cyan
     menu.innerHTML = `
-        <label style="display: flex; align-items: center; gap: 8px; color: #00e5ff; font-weight: bold; cursor: pointer; padding: 4px 0; border-bottom: 1px solid rgba(0,229,255,0.2); margin-bottom: 4px; font-family: 'Montserrat', sans-serif;">
+        <label style="color: #0284c7; font-weight: 800; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px;">
             <input type="checkbox" id="selectAllProvs" ${currentProvFilters.length === 0 || currentProvFilters.includes('ALL') ? 'checked' : ''}> TODOS LOS PROVEEDORES
         </label>
     `;
@@ -97,7 +131,7 @@ function populateProviders(records) {
     provs.forEach(p => {
         const isChecked = currentProvFilters.includes(p) || currentProvFilters.includes('ALL') || currentProvFilters.length === 0;
         menu.innerHTML += `
-            <label style="display: flex; align-items: center; gap: 8px; color: #fff; cursor: pointer; padding: 2px 0; font-family: 'Montserrat', sans-serif;">
+            <label>
                 <input type="checkbox" class="prov-check" value="${p}" ${isChecked ? 'checked' : ''}> ${p}
             </label>
         `;
@@ -111,13 +145,9 @@ function updateStatusFiltersArray() {
     currentStatusFilters = Array.from(checkboxes).filter(cb => cb.checked).map(cb => cb.value);
 
     const btnText = document.querySelector('#statusDropdownBtn .btn-text');
-    if (currentStatusFilters.length === checkboxes.length) {
-        btnText.textContent = "TODOS LOS ESTADOS";
-    } else if (currentStatusFilters.length === 0) {
-        btnText.textContent = "NINGÚN ESTADO";
-    } else {
-        btnText.textContent = `${currentStatusFilters.length} ESTADOS SEL.`;
-    }
+    if (currentStatusFilters.length === checkboxes.length) btnText.textContent = "TODOS LOS ESTADOS";
+    else if (currentStatusFilters.length === 0) btnText.textContent = "NINGÚN ESTADO";
+    else btnText.textContent = `${currentStatusFilters.length} ESTADOS SEL.`;
 }
 
 function updateProvFiltersArray() {
@@ -163,33 +193,189 @@ function getFiltered() {
         });
     }
 
-    // Filtro inteligente multi-selección de Proveedores
     if (currentProvFilters.length > 0 && !currentProvFilters.includes('ALL')) {
         records = records.filter(r => currentProvFilters.includes(r['NOMBRE DE PROVEEDOR']));
     }
 
-    // Filtro inteligente multi-selección de Estados
     records = records.filter(r => currentStatusFilters.includes(statusOf(r['ESTADO'] || r['Estado LPN'])));
-
     return records;
 }
 
 function calcKPIs(records) {
     const env = records.reduce((a, r) => a + toN(r['Suma de Recuento de LPN enviadas']), 0);
     const rec = records.reduce((a, r) => a + toN(r['Suma de Recuento de LPN recibidas']), 0);
-    const sku = records.reduce((a, r) => a + toN(r['SKU TOTALES']), 0);
+    const sku = records.reduce((a, r) => a + toN(r['SKU TOTALES'] || r['SKU']), 0);
+
+    const skuRec = records.reduce((a, r) => {
+        const st = statusOf(r['ESTADO'] || r['Estado LPN']);
+        if (st === 'RECEPCIÓN INICIADA' || st === 'RECEPCIÓN COMPLETA' || st === 'VERIFICADO') {
+            return a + toN(r['SKU TOTALES'] || r['SKU']);
+        }
+        return a;
+    }, 0);
+
     const prov = new Set(records.map(r => r['NOMBRE DE PROVEEDOR']).filter(Boolean)).size;
     const pct = env > 0 ? (rec / env) * 100 : 0;
-    return { env, rec, sku, prov, pct };
+    return { env, rec, sku, skuRec, prov, pct };
 }
 
-function renderKPIs({ env, rec, sku, prov }) {
-    document.getElementById('kEnv').textContent = fmt(env);
-    document.getElementById('kRec').textContent = fmt(rec);
-    document.getElementById('kSku').textContent = fmt(sku);
+function renderKPIs({ env, rec, sku, skuRec, prov }) {
+    document.getElementById('kLpnRatio').textContent = `${fmt(rec)} / ${fmt(env)}`;
+    document.getElementById('kSkuRatio').textContent = `${fmt(skuRec)} / ${fmt(sku)}`;
     document.getElementById('kProv').textContent = prov;
+
+    actualizarKPIIncidencias();
+    actualizarKPIAgenda();
 }
 
+
+// ═════════════════════════════════════════════════════════════════════════
+// 4. INTEGRACIÓN SUPABASE (INCIDENCIAS Y AGENDA)
+// ═════════════════════════════════════════════════════════════════════════
+async function cargarIncidenciasDesdeSupabase() {
+    try {
+        let incidenciasCargadas = [];
+        let desde = 0;
+        const limite = 1000;
+        let leyendo = true;
+
+        while (leyendo) {
+            const { data, error } = await _supabase
+                .from('incidencias_proveedores')
+                .select('*')
+                .range(desde, desde + limite - 1);
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                incidenciasCargadas = incidenciasCargadas.concat(data);
+                desde += limite;
+                if (data.length < limite) leyendo = false;
+            } else {
+                leyendo = false;
+            }
+        }
+
+        baseDatosIncidencias = incidenciasCargadas;
+        actualizarKPIIncidencias();
+    } catch (err) {
+        console.error("Error al cargar incidencias desde Supabase:", err);
+    }
+}
+
+async function cargarAgendaDesdeSupabase() {
+    try {
+        let agendaCargada = [];
+        let desde = 0;
+        const limite = 1000;
+        let leyendo = true;
+
+        while (leyendo) {
+            const { data, error } = await _supabase
+                .from('agenda_b100')
+                .select('*')
+                .range(desde, desde + limite - 1);
+
+            if (error) throw error;
+
+            if (data && data.length > 0) {
+                agendaCargada = agendaCargada.concat(data);
+                desde += limite;
+                if (data.length < limite) leyendo = false;
+            } else {
+                leyendo = false;
+            }
+        }
+
+        baseDatosAgenda = agendaCargada;
+        actualizarKPIAgenda();
+    } catch (err) {
+        console.error("Error al cargar agenda desde Supabase:", err);
+    }
+}
+
+function getSelectedDateISO() {
+    const dateVal = document.getElementById('dateFilter')?.value;
+    if (!dateVal || dateVal === 'AUTO') {
+        return todayISOStr();
+    } else if (dateVal.includes('/')) {
+        const p = dateVal.split('/');
+        return `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}`;
+    }
+    return dateVal;
+}
+
+function actualizarKPIIncidencias() {
+    const elemKPI = document.getElementById('kIncidencias');
+    if (!elemKPI) return;
+
+    if (!baseDatosIncidencias || baseDatosIncidencias.length === 0) {
+        elemKPI.textContent = "0";
+        return;
+    }
+
+    const fechaTargetISO = getSelectedDateISO();
+
+    const totalIncidencias = baseDatosIncidencias.filter(item => {
+        if (!item.fecha) return false;
+        const fClean = String(item.fecha).split('T')[0].trim();
+        return fClean === fechaTargetISO;
+    }).length;
+
+    elemKPI.textContent = totalIncidencias.toLocaleString('es-AR');
+}
+
+function actualizarKPIAgenda() {
+    const elemHrs = document.getElementById('kHrsRatio');
+    if (!elemHrs) return;
+
+    if (!baseDatosAgenda || baseDatosAgenda.length === 0) {
+        elemHrs.textContent = `0.0h / ${CAPACIDAD_FIJA_DIARIA.toFixed(1)}h`;
+        return;
+    }
+
+    const fechaTargetISO = getSelectedDateISO();
+
+    const registrosFiltrados = baseDatosAgenda.filter(item => {
+        if (!item.fecha) return false;
+        const coincideFecha = String(item.fecha).split('T')[0].trim() === fechaTargetISO;
+        if (!coincideFecha) return false;
+
+        if (currentOriginFilter !== 'ALL') {
+            const destinoStr = String(item.tipo_destino || '').toUpperCase();
+            return destinoStr.includes(currentOriginFilter);
+        }
+
+        return true;
+    });
+
+    let totalMinutos = 0;
+
+    registrosFiltrados.forEach(item => {
+        if (item.hora_inicio && item.hora_fin) {
+            const [hIni, mIni] = String(item.hora_inicio).split(':').map(Number);
+            const [hFin, mFin] = String(item.hora_fin).split(':').map(Number);
+
+            if (!isNaN(hIni) && !isNaN(hFin)) {
+                const minInicio = (hIni * 60) + (mIni || 0);
+                const minFin = (hFin * 60) + (mFin || 0);
+
+                let difMinutos = minFin - minInicio;
+                if (difMinutos < 0) difMinutos += 1440;
+
+                totalMinutos += difMinutos;
+            }
+        }
+    });
+
+    const totalHoras = totalMinutos / 60;
+    elemHrs.textContent = `${totalHoras.toFixed(1)}h / ${CAPACIDAD_FIJA_DIARIA.toFixed(1)}h`;
+}
+
+
+// ═════════════════════════════════════════════════════════════════════════
+// 5. GAUGE NEÓN, BATERÍAS Y TOP OPERADORES
+// ═════════════════════════════════════════════════════════════════════════
 const SEGS = 72, GAP = 0.035;
 function getGaugeColor(pctVal) {
     if (pctVal <= 12.5) return ['#FF0000', 'rgba(255,0,0,.7)'];
@@ -227,43 +413,15 @@ function drawGauge(canvas, pct, time = 0) {
         if (i < filledCnt) {
             const segPct = (i / SEGS) * 100;
             const [fill, glow] = getGaugeColor(segPct);
-            const baseGlow = 10;
-            const extraGlow = (Math.sin(time / 400) + 1) * 8;
             ctx.fillStyle = fill;
-            ctx.shadowColor = glow; ctx.shadowBlur = baseGlow + extraGlow;
+            ctx.shadowColor = glow; ctx.shadowBlur = 12;
         } else {
-            ctx.fillStyle = 'rgba(255,255,255,0.06)';
+            ctx.fillStyle = 'rgba(255,255,255,0.08)';
             ctx.shadowBlur = 0;
         }
         ctx.fill();
     }
     ctx.shadowBlur = 0;
-
-    ctx.beginPath(); ctx.arc(cx, cy, Ri * 0.93, 0, Math.PI * 2);
-    ctx.strokeStyle = pct > 0 ? getGaugeColor(pct)[0] : '#00ff66';
-    ctx.lineWidth = 1; ctx.globalAlpha = 0.3; ctx.stroke();
-    ctx.globalAlpha = 1;
-
-    if (pct > 0) {
-        ctx.save();
-        ctx.beginPath();
-        ctx.arc(cx, cy, Ri * 0.93, 0, Math.PI * 2);
-        ctx.clip();
-        const [fillCol] = getGaugeColor(pct);
-        ctx.fillStyle = fillCol;
-        ctx.globalAlpha = 0.3;
-        const liquidY = cy + (Ri * 0.4) - ((Ri * 0.8) * (pct / 100));
-        const waveFreq = 0.04;
-        const waveAmp = Ri * 0.08;
-        ctx.beginPath();
-        ctx.moveTo(cx - Ri, cy + Ri);
-        for (let x = cx - Ri; x <= cx + Ri; x += 5) {
-            ctx.lineTo(x, liquidY + Math.sin(x * waveFreq + time * 0.002) * waveAmp);
-        }
-        ctx.lineTo(cx + Ri, cy + Ri);
-        ctx.fill();
-        ctx.restore();
-    }
 
     const [textCol] = pct > 0 ? getGaugeColor(pct) : ['#00ff66'];
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -274,10 +432,9 @@ function drawGauge(canvas, pct, time = 0) {
     ctx.fillText(pct.toFixed(1) + '%', cx, cy - Ro * 0.08);
 
     ctx.shadowBlur = 0;
-    ctx.fillStyle = '#fdfbfbff';
-    ctx.font = `700 ${Math.floor(Ro * 0.10)}px 'Orbitron', sans-serif`;
-    ctx.letterSpacing = '3px';
-    ctx.fillText('% AVANCE', cx, cy + Ro * 0.25);
+    ctx.fillStyle = '#ffffff';
+    ctx.font = `800 ${Math.floor(Ro * 0.10)}px 'Orbitron', sans-serif`;
+    ctx.fillText('% AVANCE GENERAL', cx, cy + Ro * 0.25);
 }
 
 let gaugeLoopStarted = false;
@@ -300,12 +457,12 @@ function sizeGauge() {
     const canvas = document.getElementById('gaugeCanvas');
     const wrap = document.getElementById('colGauge');
     if (!wrap || !canvas) return;
-    const size = Math.min(wrap.clientWidth, wrap.clientHeight) * 1.20;
+    const size = Math.min(wrap.clientWidth, wrap.clientHeight) * 0.95;
     if (size > 0) { canvas.width = size; canvas.height = size; }
     drawGauge(canvas, gaugeCur, performance.now());
 }
 
-function updateBatteries(records) {
+function updateBatteries() {
     const dp = { env: 0, rec: 0 }, cds = { env: 0, rec: 0 };
     let baseRecords = allRecords;
     const dateVal = document.getElementById('dateFilter').value;
@@ -325,56 +482,119 @@ function updateBatteries(records) {
         else { cds.env += e; cds.rec += c; }
     });
 
-    const set = (fillId, numId, pctId, d, colorClass) => {
+    const set = (numId, pctId, d) => {
         const p = d.env > 0 ? (d.rec / d.env) * 100 : 0;
-        const fillEl = document.getElementById(fillId);
-        if (fillEl) {
-            fillEl.style.width = Math.min(p, 100) + '%';
-            fillEl.className = 'vbat-fill ' + colorClass;
-        }
-        document.getElementById(numId).textContent = `${fmt(d.rec)} / ${fmt(d.env)}`;
-        document.getElementById(pctId).textContent = p.toFixed(1) + '%';
+        const numElem = document.getElementById(numId);
+        const pctElem = document.getElementById(pctId);
+        if (numElem) numElem.textContent = `${fmt(d.rec)} / ${fmt(d.env)}`;
+        if (pctElem) pctElem.textContent = p.toFixed(1) + '%';
     };
 
-    set('dpFill', 'dpNum', 'dpPct', dp, 'bg-cyan');
-    set('cdsFill', 'cdsNum', 'cdsPct', cds, 'bg-neon');
+    set('dpNum', 'dpPct', dp);
+    set('cdsNum', 'cdsPct', cds);
 }
 
-function initBubbles() {
-    ['dpBubs', 'cdsBubs'].forEach(id => {
-        const container = document.getElementById(id);
-        if (!container) return;
-        container.innerHTML = '';
-        for (let i = 0; i < 15; i++) {
-            const b = document.createElement('div');
-            b.className = 'bub';
-            const sz = 3 + Math.random() * 5;
-            b.style.cssText = `width:${sz}px;height:${sz}px;bottom:${5 + Math.random() * 90}%;--dy:${(Math.random() - .5) * 20}px;animation-duration:${2 + Math.random() * 2}s;animation-delay:${-Math.random() * 3}s;`;
-            container.appendChild(b);
+async function updateTopOperators() {
+    const container = document.getElementById('topOperatorsList');
+    if (!container) return;
+
+    try {
+        const response = await fetch('https://productividad2-dashboard.onrender.com/api/data');
+        const data = await response.json();
+
+        if (!data || !data.registros) return;
+
+        const marcaTiempoActual = data.metadatos ? data.metadatos.actualizacion : null;
+        if (marcaTiempoActual && marcaTiempoActual === ultimaActualizacionExitosa) {
+            return;
         }
-    });
+
+        ultimaActualizacionExitosa = marcaTiempoActual;
+        const agg = {};
+        const misRegistros = data.registros || {};
+        let totalGlobalLpns = Object.keys(misRegistros).length;
+
+        for (let key in misRegistros) {
+            let current = misRegistros[key] || {};
+            let uid = "ANONIMO";
+            if (current.usuario_id && typeof current.usuario_id === "string" && current.usuario_id.trim() !== "") {
+                uid = current.usuario_id.trim().toUpperCase();
+            }
+
+            if (!agg[uid]) {
+                let fotoPlaceholder = "https://ui-avatars.com/api/?name=" + encodeURIComponent(uid) + "&background=1e293b&color=00f3ff&rounded=true";
+                let realFoto = (current.usuario_foto && typeof current.usuario_foto === "string" && current.usuario_foto.includes("http"))
+                    ? current.usuario_foto
+                    : fotoPlaceholder;
+
+                agg[uid] = { count: 0, foto: realFoto };
+            }
+            agg[uid].count += 1;
+        }
+
+        const sortedUsers = Object.entries(agg)
+            .map(entry => ({ username: entry[0], lpns: entry[1].count, foto: entry[1].foto }))
+            .sort((a, b) => b.lpns - a.lpns);
+
+        if (sortedUsers.length === 0) {
+            container.innerHTML = '<div style="padding:10px; color:#888; text-align:center;">Sin datos de operadores</div>';
+            return;
+        }
+
+        let html = "";
+        sortedUsers.forEach((user, index) => {
+            const rank = index + 1;
+            const prodPct = totalGlobalLpns > 0 ? ((user.lpns / totalGlobalLpns) * 100).toFixed(1) : "0.0";
+
+            let badgeClass = "";
+            if (rank === 1) badgeClass = "gold";
+            else if (rank === 2) badgeClass = "silver";
+            else if (rank === 3) badgeClass = "bronze";
+
+            html += `
+                <div class="op-rank-item">
+                    <span class="rank-badge ${badgeClass}">${rank}</span>
+                    <div class="op-avatar-wrap" style="position: relative; flex-shrink: 0;">
+                        <img src="${user.foto}" alt="${user.username}" style="width: 38px; height: 38px; border-radius: 50%; object-fit: cover; border: 2px solid #00f3ff; display: block;" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(user.username)}&background=1e293b&color=00f3ff&rounded=true';"/>
+                    </div>
+                    <div class="rank-info">
+                        <span class="rank-name">${user.username}</span>
+                        <span class="rank-sub">${fmt(user.lpns)} LPNs</span>
+                    </div>
+                    <div class="rank-pct-box" style="text-align: right; flex-shrink: 0; margin-left: auto;">
+                        <span style="font-family: 'Orbitron', sans-serif; font-weight: 800; font-size: 0.85rem; color: #0284c7;">${prodPct}%</span>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+
+    } catch (error) {
+        console.error("Error al cargar productividad global:", error);
+    }
 }
 
+
+// ═════════════════════════════════════════════════════════════════════════
+// 6. TABLA INFINITA CON SCROLL ANIMADO
+// ═════════════════════════════════════════════════════════════════════════
 function aggregate(records) {
     const map = {};
     records.forEach(r => {
         const name = r['NOMBRE DE PROVEEDOR'] || r['Proveedor'] || 'N/D';
         const transStatus = statusOf(r['ESTADO'] || r['Estado LPN']);
         const rawOrig = String(r['Informacion de Origen'] || r['INFORMACION DE ORIGEN'] || 'N/D').toUpperCase();
-        const orig = rawOrig.includes('DP') ? 'DP' : (rawOrig.includes('CDS') ? 'CDS' : rawOrig);
+        const orig = rawOrig.includes('DP') ? 'SALA (DP)' : (rawOrig.includes('CDS') ? 'FARMACIA (CDS)' : rawOrig);
 
         const k = `${name}|||${transStatus}|||${orig}`;
-
-        if (!map[k]) {
-            map[k] = { name, env: 0, rec: 0, sku: 0, estado: transStatus, origen: orig };
-        }
+        if (!map[k]) map[k] = { name, env: 0, rec: 0, sku: 0, estado: transStatus, origen: orig };
         map[k].env += toN(r['Suma de Recuento de LPN enviadas']);
         map[k].rec += toN(r['Suma de Recuento de LPN recibidas'] || r['Cant recib']);
-        map[k].sku += toN(r['SKU TOTALES']);
+        map[k].sku += toN(r['SKU TOTALES'] || r['SKU']);
     });
 
-    const filteredItems = Object.values(map);
-    return filteredItems.sort((a, b) => b.env - a.env);
+    return Object.values(map).sort((a, b) => b.env - a.env);
 }
 
 function buildRows(items) {
@@ -383,25 +603,25 @@ function buildRows(items) {
         const w = Math.min(pct, 100).toFixed(1);
         const stLbl = item.estado;
 
-        let pillClass = 'pill-pen';
+        let pillClass = 'pill-ini';
         if (stLbl === 'VERIFICADO') pillClass = 'pill-ver';
         else if (stLbl === 'EN TRÁNSITO') pillClass = 'pill-tra';
         else if (stLbl === 'RECEPCIÓN COMPLETA') pillClass = 'pill-com';
-        else if (stLbl === 'RECEPCIÓN INICIADA') pillClass = 'pill-ini';
 
-        let origColor = item.origen.includes('DP') ? '#00e5ff' : '#ffff00';
+        let origColor = item.origen.includes('SALA') ? '#0284c7' : '#ca8a04';
+        const safeName = item.name.replace(/'/g, "\\'");
 
-        return `<div class="trow" onclick="openOperatorsModal('${item.name.replace(/'/g, "\\'")}', '${stLbl}', '${item.origen}')">
-            <span class="c-prov" style="flex: 2;" title="${item.name}">${item.name}</span>
-            <span class="c-est" style="flex: 1.5;"><span class="pill ${pillClass}">${stLbl}</span></span>
-            <span class="c-orig" style="flex: 0.8; color: ${origColor}; font-weight: 700;">${item.origen}</span>
-            <span class="c-sku" style="flex: 0.6;">${fmt(item.sku)}</span>
-            <span class="c-rec" style="flex: 0.8;">${fmt(item.rec)}</span>
-            <span class="c-env" style="flex: 0.8;">${fmt(item.env)}</span>
-            <div class="t-bar-wrap" style="flex: 1.5;">
-                <span class="t-bar-pct" style="color: #39FF14;">${w}%</span>
+        return `<div class="trow" onclick="openOperatorsModal('${safeName}', '${stLbl}', '${item.origen}')">
+            <span class="c-prov" title="${item.name}">${item.name}</span>
+            <span class="c-est"><span class="pill ${pillClass}">${stLbl}</span></span>
+            <span class="c-orig" style="color: ${origColor};">${item.origen}</span>
+            <span class="c-sku">${fmt(item.sku)}</span>
+            <span class="c-rec">${fmt(item.rec)}</span>
+            <span class="c-env">${fmt(item.env)}</span>
+            <div class="t-bar-wrap">
+                <span class="t-bar-pct">${w}%</span>
                 <div class="t-bar-bg">
-                    <div class="t-bar-fill neon-moving-bar" style="width:${w}%"></div>
+                    <div class="t-bar-fill" style="width:${w}%"></div>
                 </div>
             </div>
         </div>`;
@@ -443,7 +663,7 @@ function updateTable(records) {
         track.classList.add('infinite-scroll-running');
 
         function animateScroll() {
-            tableScrollPos += 1.2;
+            tableScrollPos += 1;
             wrapper.scrollTop = Math.round(tableScrollPos);
             const limit = parseFloat(track.dataset.origHeight || 0);
             if (limit > 0 && tableScrollPos >= limit) {
@@ -461,8 +681,10 @@ function updateTable(records) {
 
 
 // ═════════════════════════════════════════════════════════════════════════
-// 4. CRUCE AVANZADO ENTRE AMBAS BASES DE DATOS (CORREGIDO CON DETECCIÓN ÚNICA)
+// 7. MODALES FLOTANTES (OPERADORES, PROVEEDORES E INCIDENCIAS)
 // ═════════════════════════════════════════════════════════════════════════
+
+// A. Modal Operadores (Invocado al hacer clic en filas de la Tabla TRH)
 function openOperatorsModal(provName, status, origin) {
     const modalWrap = document.getElementById('gala-overlay');
     const titleEl = document.getElementById('gala-target-prov');
@@ -474,106 +696,55 @@ function openOperatorsModal(provName, status, origin) {
     titleEl.textContent = `${provName} • [${origin}] • ${status}`;
 
     const selectedDateDropdown = document.getElementById('dateFilter').value;
-    let targetDate = selectedDateDropdown;
-    if (selectedDateDropdown === 'AUTO') {
-        targetDate = todayStr();
-    }
+    let targetDate = selectedDateDropdown === 'AUTO' ? todayStr() : selectedDateDropdown;
 
+    // Búsqueda cruzada en base de datos de productividad
     const operariosAsignados = pndRecords.filter(r => {
-        const provFB2 = String(r['NOMBRE DE PROVEEDOR'] || r['Proveedor'] || '').trim().toUpperCase();
-        const dateFB2 = String(r['Fecha Personal 1'] || r['FECHA'] || '').trim();
-        const rawOrigFB2 = String(r['Informacion de Origen'] || r['INFORMACION DE ORIGEN'] || '').toUpperCase();
-        const origFB2 = rawOrigFB2.includes('DP') ? 'DP' : (rawOrigFB2.includes('CDS') ? 'CDS' : '');
-
-        const matchProv = (provFB2 === targetProvUpper);
-        const matchDate = (dateFB2 === targetDate || !dateFB2 || selectedDateDropdown === 'ALL');
-        const matchOrig = (origFB2 === origin.toUpperCase());
-
-        return matchProv && matchDate && matchOrig;
+        const provFB2 = String(r['NOMBRE DE PROVEEDOR'] || r['Proveedor'] || r['proveedor'] || '').trim().toUpperCase();
+        const dateFB2 = String(r['Fecha Personal 1'] || r['FECHA'] || r['fecha'] || '').trim();
+        return (provFB2 === targetProvUpper) && (selectedDateDropdown === 'ALL' || dateFB2 === targetDate || targetDate === 'AUTO');
     });
 
-    // 🌟 CORRECCIÓN CRÍTICA: Total de LPNs reales calculados sin duplicados de subprocesos
     const uniqueLpnCounterSet = new Set();
-    operariosAsignados.forEach(r => {
-        const lpnId = r['LPN'] || r['Suma de Recuento de LPN recibidas'] || Math.random();
-        uniqueLpnCounterSet.add(lpnId);
-    });
+    operariosAsignados.forEach(r => uniqueLpnCounterSet.add(r['LPN'] || r['lpn'] || Math.random()));
     const totalLpnProv = uniqueLpnCounterSet.size || 1;
 
     const opMap = {};
-
     operariosAsignados.forEach(r => {
-        let rawUser = r['usuario_id'] || r['USUARIO RECEPCION'] || r['Usuario'] || 'ANONIMO';
-        let opKey = String(rawUser).trim();
-        let normalizedPhotoKey = opKey.toLowerCase().replace(/\./g, '-');
-        let cleanDisplayName = opKey.toUpperCase();
-
-        // Identificadores para evitar que subtareas sumen infinito el mismo SKU/LPN en el mismo operador
-        const lpnUniqueId = r['LPN'] || Math.random();
-        const skuUniqueId = r['SKU'] || r['SKU TOTALES'] || Math.random();
-
-        const timeStr = String(r['HORA RECEPCION'] || r['Fe y Hr MOD'] || r['HORA'] || '').trim();
-
-        // 🌟 CORRECCIÓN DE HORAS INTERACTIVA E INTELIGENTE
-        let timeOnly = '';
-        if (timeStr) {
-            let matchTime = timeStr.match(/(\d{2}:\d{2}:\d{2})/);
-            if (matchTime) {
-                timeOnly = matchTime[1];
-            } else {
-                let matchShortTime = timeStr.match(/(\d{2}:\d{2})/);
-                timeOnly = matchShortTime ? matchShortTime[1] + ":00" : timeStr;
-            }
-        }
-
+        let opKey = String(r['usuario_id'] || r['USUARIO RECEPCION'] || r['usuario'] || 'ANONIMO').trim();
         if (!opMap[opKey]) {
             opMap[opKey] = {
-                name: cleanDisplayName,
-                photoKey: normalizedPhotoKey,
+                name: opKey.toUpperCase(),
+                photoKey: opKey.toLowerCase().replace(/\./g, '-'),
                 lpnSet: new Set(),
                 skuSet: new Set(),
-                firstTime: timeOnly,
-                lastTime: timeOnly,
-                directPhoto: r['usuario_foto'] || r['Usuario_Foto'] || ''
+                directPhoto: r['usuario_foto'] || ''
             };
         }
-
-        // Agregar al set único del operario
-        opMap[opKey].lpnSet.add(lpnUniqueId);
-        opMap[opKey].skuSet.add(skuUniqueId);
-
-        if (timeOnly) {
-            if (!opMap[opKey].firstTime || timeOnly < opMap[opKey].firstTime) opMap[opKey].firstTime = timeOnly;
-            if (!opMap[opKey].lastTime || timeOnly > opMap[opKey].lastTime) opMap[opKey].lastTime = timeOnly;
-        }
+        opMap[opKey].lpnSet.add(r['LPN'] || r['lpn'] || Math.random());
+        opMap[opKey].skuSet.add(r['SKU'] || r['sku'] || Math.random());
     });
 
     const opList = Object.values(opMap);
 
     if (opList.length === 0) {
-        contentEl.innerHTML = `<div style="color:var(--muted); text-align:center; width:100%; font-size:1.4rem; padding: 40px;">
-            No se detectaron transacciones de operarios para esta orden específica en FB2.</div>`;
+        contentEl.innerHTML = `<div style="color:#94a3b8; text-align:center; padding: 30px;">
+            No se detectaron transacciones de operarios asignados a esta orden.</div>`;
     } else {
         contentEl.innerHTML = opList.map(op => {
-            // Evaluamos la longitud de los sets para obtener números reales limpios
             const realLpnCount = op.lpnSet.size;
             const realSkuCount = op.skuSet.size;
             const partPct = (((realLpnCount / totalLpnProv) * 100)).toFixed(1);
-            const finalPhotoUrl = op.directPhoto ? op.directPhoto : `https://i.postimg.cc/${op.photoKey}.jpg`;
+            const finalPhotoUrl = op.directPhoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(op.name)}&background=1e293b&color=00f3ff&rounded=true`;
 
             return `
-                <div class="op-card-premium" style="display: flex !important; flex-direction: row !important; align-items: center !important; padding: 24px !important; position: relative; gap: 25px;">
-                    <div class="op-avatar-premium-zone" style="position: relative; flex-shrink: 0; width: 100px; height: 100px;">
-                        <img src="${finalPhotoUrl}" 
-                             style="width: 100% !important; height: 100% !important; object-fit: cover !important; border-radius: 50% !important; border: 3px solid #00e5ff !important; box-shadow: 0 0 15px rgba(0,229,255,0.4);" 
-                             alt="${op.name}" 
-                             onerror="this.onerror=null; this.parentNode.innerHTML='<div style=\\'width:100px; height:100px; display:flex; align-items:center; justify-content:center; border:3px solid #00e5ff; border-radius:50%; background:#020b14;\\'><i class=\\'fas fa-user-shield\\' style=\\'font-size: 40px; color: #4a6878;\\'></i></div>';">
-                        <div class="op-badge-part-premium" style="position: absolute !important; bottom: -12px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 99 !important;">${partPct}% PART.</div>
+                <div class="op-card-premium">
+                    <div class="op-avatar-premium-zone">
+                        <img src="${finalPhotoUrl}" style="width:100%; height:100%; object-fit:cover; border-radius:50%; border:2px solid #00e5ff;" onerror="this.onerror=null; this.src='https://ui-avatars.com/api/?name=${encodeURIComponent(op.name)}&background=1e293b&color=00f3ff&rounded=true';">
+                        <div class="op-badge-part-premium">${partPct}% PART.</div>
                     </div>
-                    
-                    <div class="op-info-premium" style="flex-grow: 1; display: flex; flex-direction: column; gap: 10px;">
-                        <div class="op-name-premium">${op.name}</div>
-                        
+                    <div class="op-info-premium">
+                        <div class="op-name-premium" style="color: #ffffff; font-weight: 800;">${op.name}</div>
                         <div class="op-stats-premium-row">
                             <div class="op-stat-premium-box bg-glow-lpn">
                                 <span class="op-stat-premium-label">LPN RECIBIDOS</span>
@@ -584,38 +755,144 @@ function openOperatorsModal(provName, status, origin) {
                                 <span class="op-stat-premium-value text-neon-yellow">${fmt(realSkuCount)}</span>
                             </div>
                         </div>
-                        
-                        <div class="op-time-premium-bar">
-                            <span class="op-time-label"><i class="far fa-clock"></i> RANGO OPERATIVO:</span>
-                            <span class="op-time-value">${op.firstTime || 'N/D'} a ${op.lastTime || 'N/D'}</span>
-                        </div>
                     </div>
                 </div>
             `;
         }).join('');
     }
 
+    modalWrap.style.backdropFilter = 'blur(12px)';
     modalWrap.classList.remove('gala-hidden');
 }
 
-function deleteUnusedOpProperties() { /* Sanitización opcional */ }
+// B. Modal Proveedores (Diseño Ultra-Compacto de Cuadrícula 2 Columnas)
+function openProveedoresModal() {
+    const modalWrap = document.getElementById('gala-overlay');
+    const titleEl = document.getElementById('gala-target-prov');
+    const contentEl = document.getElementById('gala-content');
+
+    if (!modalWrap || !contentEl) return;
+
+    titleEl.textContent = `LISTADO GLOBAL DE PROVEEDORES Y AVANCE`;
+
+    const records = getFiltered();
+    const map = {};
+
+    records.forEach(r => {
+        const name = r['NOMBRE DE PROVEEDOR'] || r['Proveedor'] || 'N/D';
+        if (!map[name]) map[name] = { env: 0, rec: 0 };
+        map[name].env += toN(r['Suma de Recuento de LPN enviadas']);
+        map[name].rec += toN(r['Suma de Recuento de LPN recibidas']);
+    });
+
+    const items = Object.entries(map).map(([name, d]) => ({
+        name,
+        env: d.env,
+        rec: d.rec,
+        pct: d.env > 0 ? (d.rec / d.env) * 100 : 0
+    })).sort((a, b) => b.pct - a.pct); // Ordenados de 100% a 0%
+
+    if (items.length === 0) {
+        contentEl.innerHTML = `<div style="color:#94a3b8; text-align:center; padding: 30px;">No hay proveedores en la vista actual.</div>`;
+    } else {
+        let gridHtml = `<div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; width: 100%;">`;
+
+        items.forEach(p => {
+            const w = Math.min(p.pct, 100).toFixed(1);
+            const isComplete = p.pct >= 100;
+            const barColor = isComplete ? 'linear-gradient(90deg, #10b981, #34d399)' : 'linear-gradient(90deg, #0284c7, #00f3ff)';
+            const statusBadge = isComplete ? '<span style="color:#34d399; font-size:0.65rem; font-weight:800;">✓ COMPLETO</span>' : `<span style="color:#00f3ff; font-size:0.65rem; font-weight:800;">${w}%</span>`;
+
+            gridHtml += `
+                <div style="background: rgba(15, 23, 42, 0.85); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; padding: 6px 10px; display: flex; flex-direction: column; gap: 4px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center;">
+                        <span style="color: #ffffff; font-weight: 700; font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70%;" title="${p.name}">${p.name}</span>
+                        ${statusBadge}
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.68rem; color: #94a3b8;">
+                        <span>LPN: ${fmt(p.rec)} / ${fmt(p.env)}</span>
+                    </div>
+                    <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden;">
+                        <div style="width: ${w}%; height: 100%; background: ${barColor};"></div>
+                    </div>
+                </div>
+            `;
+        });
+
+        gridHtml += `</div>`;
+        contentEl.innerHTML = gridHtml;
+    }
+
+    modalWrap.style.backdropFilter = 'blur(12px)';
+    modalWrap.classList.remove('gala-hidden');
+}
+
+// C. Modal Incidencias Supabase Corregido
+function openIncidenciasModal() {
+    const modalWrap = document.getElementById('gala-overlay');
+    const titleEl = document.getElementById('gala-target-prov');
+    const contentEl = document.getElementById('gala-content');
+
+    if (!modalWrap || !contentEl) return;
+
+    titleEl.textContent = `DETALLE DE INCIDENCIAS DE PROVEEDORES`;
+
+    const fechaTargetISO = getSelectedDateISO();
+
+    const incidenciasHoy = baseDatosIncidencias.filter(item => {
+        if (!item.fecha) return false;
+        const fClean = String(item.fecha).split('T')[0].trim();
+        return fClean === fechaTargetISO;
+    });
+
+    if (incidenciasHoy.length === 0) {
+        contentEl.innerHTML = `<div style="color:#94a3b8; text-align:center; padding: 30px;">No se registraron incidencias para la fecha seleccionada (${fechaTargetISO}).</div>`;
+    } else {
+        contentEl.innerHTML = incidenciasHoy.map((inc, i) => {
+            const nomProv = inc.proveedor || 'PROVEEDOR N/D';
+            const nomTipo = inc.incidencias || inc.tipo || 'INCIDENCIA GENERAL';
+            const desMotivo = inc.motivos || 'Sin motivo detallado';
+            const hrAtraso = inc.hr_atraso && inc.hr_atraso !== '00:00:00' ? `Atraso: ${inc.hr_atraso}` : '';
+            const hrPerdida = inc.hr_perdida && inc.hr_perdida !== '00:00:00' ? `Pérdida: ${inc.hr_perdida}` : '';
+            const tiemposArr = [hrAtraso, hrPerdida].filter(Boolean).join(' | ');
+
+            return `
+                <div style="background: rgba(239, 68, 68, 0.12); border-left: 4px solid #ef4444; border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                        <span style="color: #fca5a5; font-weight: 800; font-size: 0.85rem;">#${i + 1} • ${nomProv}</span>
+                        <span style="color: #ef4444; font-size: 0.72rem; font-weight: 800; background: rgba(239, 68, 68, 0.2); padding: 2px 6px; border-radius: 4px;">${nomTipo}</span>
+                    </div>
+                    <div style="color: #ffffff; font-size: 0.82rem; margin-top: 4px;">
+                        <strong>Motivo:</strong> ${desMotivo}
+                    </div>
+                    ${tiemposArr ? `<div style="color: #fb7185; font-size: 0.72rem; margin-top: 4px; font-weight: 700;"><i class="fas fa-clock"></i> ${tiemposArr}</div>` : ''}
+                </div>
+            `;
+        }).join('');
+    }
+
+    modalWrap.style.backdropFilter = 'blur(12px)';
+    modalWrap.classList.remove('gala-hidden');
+}
 
 function closeOperatorsModal() {
     document.getElementById('gala-overlay').classList.add('gala-hidden');
 }
 
-document.getElementById('gala-close').addEventListener('click', closeOperatorsModal);
-document.getElementById('gala-overlay').addEventListener('click', (e) => {
-    if (e.target.id === 'gala-overlay' || e.target.id === 'gala-background') {
-        closeOperatorsModal();
-    }
+document.getElementById('gala-close')?.addEventListener('click', closeOperatorsModal);
+document.getElementById('gala-overlay')?.addEventListener('click', (e) => {
+    if (e.target.id === 'gala-overlay' || e.target.id === 'gala-background') closeOperatorsModal();
 });
 
 
 // ═════════════════════════════════════════════════════════════════════════
-// 5. ESCUCHAS EN TIEMPO REAL PARALELOS (AMBOS FIREBASE ESCUCHANDO JUNTOS)
+// 8. CARGAS ASÍNCRONAS Y LISTENERS DE EVENTOS
 // ═════════════════════════════════════════════════════════════════════════
 
+cargarIncidenciasDesdeSupabase();
+cargarAgendaDesdeSupabase();
+
+// Firebase Realtime Avance
 dbAvance.ref('datos_dashboard').on('value', snap => {
     const raw = snap.val();
     allRecords = raw ? (Array.isArray(raw) ? raw : Object.values(raw)).filter(Boolean) : [];
@@ -625,33 +902,17 @@ dbAvance.ref('datos_dashboard').on('value', snap => {
 
     const ov = document.getElementById('loading');
     if (ov && !ov.classList.contains('gone')) setTimeout(() => ov.classList.add('gone'), 500);
-}, err => { console.error("Error en FB1 (Avance):", err); });
+});
 
+// Firebase Realtime Productividad
 dbProductividad.ref().on('value', snap => {
     const raw = snap.val();
-    if (raw) {
-        if (Array.isArray(raw)) {
-            pndRecords = raw.filter(Boolean);
-        } else {
-            let processed = [];
-            Object.values(raw).forEach(node => {
-                if (node && typeof node === 'object') {
-                    if (Array.isArray(node)) { processed.push(...node); }
-                    else if (node['NOMBRE DE PROVEEDOR'] || node['Proveedor']) { processed.push(node); }
-                    else { processed.push(...Object.values(node)); }
-                }
-            });
-            pndRecords = processed.filter(Boolean);
-        }
-    } else {
-        pndRecords = [];
-    }
-}, err => { console.error("Error en FB2 (Productividad):", err); });
+    pndRecords = raw ? (Array.isArray(raw) ? raw.filter(Boolean) : Object.values(raw).flat().filter(Boolean)) : [];
+});
 
+updateTopOperators();
+setInterval(updateTopOperators, 1800000);
 
-// ═════════════════════════════════════════════════════════════════════════
-// 6. ANIMACIONES DE FONDO Y EVENT LISTENERS DE MENÚS INTERACTIVOS
-// ═════════════════════════════════════════════════════════════════════════
 function initBackground() {
     const canvas = document.getElementById('bg');
     if (!canvas) return;
@@ -663,15 +924,12 @@ function initBackground() {
 
     let t = 0;
     const draw = () => {
-        t += 0.0096;
+        t += 0.008;
         ctx.clearRect(0, 0, W, H);
         const waves = [
-            { col: '#00e5ff', amp: H * .05, freq: .004, ph: t * 0.8, y: H * .08 },
-            { col: '#00ff88', amp: H * .06, freq: .005, ph: t * 1.2, y: H * .14 },
-            { col: '#e040fb', amp: H * .07, freq: .003, ph: t * 1.5, y: H * .20 },
-            { col: '#00e5ff', amp: H * .09, freq: .003, ph: t, y: H * .28 },
-            { col: '#e040fb', amp: H * .12, freq: .005, ph: t * 1.5, y: H * .36 },
-            { col: '#00ff88', amp: H * .07, freq: .008, ph: t * 2.2, y: H * .44 }
+            { col: '#0284c7', amp: H * .04, freq: .003, ph: t * 0.8, y: H * .10 },
+            { col: '#16a34a', amp: H * .05, freq: .001, ph: t * 1.1, y: H * .25 },
+            { col: '#9333ea', amp: H * .03, freq: .002, ph: t * 1.4, y: H * .25 }
         ];
         waves.forEach(w => {
             ctx.beginPath(); ctx.moveTo(0, w.y);
@@ -679,9 +937,8 @@ function initBackground() {
                 const noise = Math.sin(x * w.freq + w.ph) * w.amp;
                 ctx.lineTo(x, w.y + noise);
             }
-            ctx.strokeStyle = w.col; ctx.lineWidth = 1.5; ctx.globalAlpha = 0.5;
-            ctx.shadowColor = w.col; ctx.shadowBlur = 20;
-            ctx.stroke(); ctx.shadowBlur = 0; ctx.globalAlpha = 1;
+            ctx.strokeStyle = w.col; ctx.lineWidth = 1.2; ctx.globalAlpha = 0.25;
+            ctx.stroke(); ctx.globalAlpha = 1;
         });
         requestAnimationFrame(draw);
     };
@@ -693,79 +950,65 @@ function render() {
     const kpis = calcKPIs(records);
     renderKPIs(kpis);
     animateGaugeTo(kpis.pct);
-    updateBatteries(records);
+    updateBatteries();
     updateTable(records);
 }
 
-// Interceptores de UI para Desplegables Multiselección
-document.getElementById('statusDropdownBtn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    const menu = document.getElementById('statusDropdownMenu');
-    menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
-    document.getElementById('provDropdownMenu').style.display = 'none';
-});
+// Listeners de Eventos Directos
+document.addEventListener("DOMContentLoaded", () => {
+    initBackground();
+    window.addEventListener('resize', sizeGauge);
+    setTimeout(sizeGauge, 200);
 
-document.getElementById('provDropdownBtn').addEventListener('click', (e) => {
-    e.stopPropagation();
-    const menu = document.getElementById('provDropdownMenu');
-    menu.style.display = menu.style.display === 'none' ? 'flex' : 'none';
-    document.getElementById('statusDropdownMenu').style.display = 'none';
-});
+    // Asignación de clics a tarjetas KPI
+    document.getElementById('btnFilterCDS')?.addEventListener('click', () => filterByOrigin('CDS'));
+    document.getElementById('btnFilterDP')?.addEventListener('click', () => filterByOrigin('DP'));
+    document.getElementById('btnProveedoresModal')?.addEventListener('click', openProveedoresModal);
+    document.getElementById('btnIncidenciasModal')?.addEventListener('click', openIncidenciasModal);
 
-document.addEventListener('click', () => {
-    document.getElementById('statusDropdownMenu').style.display = 'none';
-    document.getElementById('provDropdownMenu').style.display = 'none';
-});
-
-document.getElementById('statusDropdownMenu').addEventListener('click', (e) => e.stopPropagation());
-document.getElementById('provDropdownMenu').addEventListener('click', (e) => e.stopPropagation());
-
-document.getElementById('statusDropdownMenu').addEventListener('change', () => {
-    updateStatusFiltersArray();
-    populateProviders(allRecords);
-    render();
-});
-
-document.getElementById('provDropdownMenu').addEventListener('change', (e) => {
-    if (e.target.id === 'selectAllProvs') {
-        const checkboxes = document.querySelectorAll('.prov-check');
-        checkboxes.forEach(cb => cb.checked = e.target.checked);
-    } else if (e.target.classList.contains('prov-check') && !e.target.checked) {
-        const selectAll = document.getElementById('selectAllProvs');
-        if (selectAll) selectAll.checked = false;
+    const dateSel = document.getElementById('dateFilter');
+    if (dateSel) {
+        dateSel.addEventListener('change', () => {
+            populateProviders(allRecords);
+            render();
+        });
     }
-    updateProvFiltersArray();
-    render();
-});
 
-document.getElementById('dateFilter').addEventListener('change', () => {
-    currentProvFilters = ['ALL'];
-    populateProviders(allRecords);
-    render();
-});
+    const statusBtn = document.getElementById('statusDropdownBtn');
+    const statusMenu = document.getElementById('statusDropdownMenu');
+    if (statusBtn && statusMenu) {
+        statusBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            statusMenu.style.display = statusMenu.style.display === 'block' ? 'none' : 'block';
+        });
 
-function toggleFilter(type) {
-    const btnDP = document.getElementById('btnFilterDP');
-    const btnCDS = document.getElementById('btnFilterCDS');
-    if (currentOriginFilter === type) {
-        currentOriginFilter = 'ALL';
-        btnDP.style.opacity = '1'; btnCDS.style.opacity = '1';
-    } else {
-        currentOriginFilter = type;
-        if (type === 'DP') { btnDP.style.opacity = '1'; btnCDS.style.opacity = '0.4'; }
-        else { btnCDS.style.opacity = '1'; btnDP.style.opacity = '0.4'; }
+        statusMenu.addEventListener('change', () => {
+            updateStatusFiltersArray();
+            populateProviders(allRecords);
+            render();
+        });
     }
-    populateProviders(allRecords);
-    render();
-}
 
-document.getElementById('btnFilterDP').addEventListener('click', () => toggleFilter('DP'));
-document.getElementById('btnFilterCDS').addEventListener('click', () => toggleFilter('CDS'));
+    const provBtn = document.getElementById('provDropdownBtn');
+    const provMenu = document.getElementById('provDropdownMenu');
+    if (provBtn && provMenu) {
+        provBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            provMenu.style.display = provMenu.style.display === 'block' ? 'none' : 'block';
+        });
 
-const btnHome = document.getElementById('btnHome');
-if (btnHome) btnHome.onclick = () => { window.location.href = 'https://portal-maestro.vercel.app/'; };
+        provMenu.addEventListener('change', (e) => {
+            if (e.target.id === 'selectAllProvs') {
+                const checks = provMenu.querySelectorAll('.prov-check');
+                checks.forEach(c => c.checked = e.target.checked);
+            }
+            updateProvFiltersArray();
+            render();
+        });
+    }
 
-window.addEventListener('resize', sizeGauge);
-initBackground();
-initBubbles();
-requestAnimationFrame(() => requestAnimationFrame(sizeGauge));
+    document.addEventListener('click', (e) => {
+        if (statusMenu && !statusBtn.contains(e.target)) statusMenu.style.display = 'none';
+        if (provMenu && !provBtn.contains(e.target)) provMenu.style.display = 'none';
+    });
+});
